@@ -1,0 +1,28 @@
+rules_version = '2';
+
+// KYC evidence: agents and branch staff upload into an inbox; Cloud Functions move files into the
+// locked `kyc/` area. No client can read KYC files directly; the portal gets short-lived signed URLs.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function canUploadKyc() {
+      return signedIn() && request.auth.token.role in ['AGENT', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'];
+    }
+
+    match /kyc-inbox/{uid}/{fileName} {
+      allow create: if canUploadKyc()
+        && uid == request.auth.uid
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow read, update, delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "susu-dev",
+    "dev": "susu-dev",
+    "staging": "susu-staging",
+    "prod": "susu-prod"
+  }
+}

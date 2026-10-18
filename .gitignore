@@ -1,0 +1,17 @@
+node_modules/
+lib/
+dist/
+.turbo/
+.next/
+*.log
+.env
+.env.*
+!.env.example
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+.DS_Store
+# generated renders
+work/*render*/
+work/client-guide-stormglide-*/

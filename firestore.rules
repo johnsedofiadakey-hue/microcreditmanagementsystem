@@ -1,0 +1,80 @@
+rules_version = '2';
+
+// Firestore is the offline-friendly window onto the ledger, never the ledger itself.
+// Clients may only:
+//   - create agent command documents (the offline queue), and read their own;
+//   - read projections (routes, member snapshots, dashboards) scoped to their claims.
+// Everything else is written by Cloud Functions through the Admin SDK.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function isAgent() {
+      return signedIn() && role() == 'AGENT';
+    }
+
+    function isHeadOffice() {
+      return signedIn() && role() in ['SUPER_ADMIN', 'FINANCE', 'COMPLIANCE'];
+    }
+
+    function hasBranch(branchId) {
+      return signedIn()
+        && request.auth.token.branchIds is list
+        && branchId in request.auth.token.branchIds;
+    }
+
+    function isUuid(id) {
+      return id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+    }
+
+    function validCommandEnvelope(d) {
+      return d.keys().hasOnly(['type', 'agentUid', 'deviceId', 'seq', 'capturedAt', 'appVersion', 'payload'])
+        && d.keys().hasAll(['type', 'agentUid', 'deviceId', 'seq', 'capturedAt', 'appVersion', 'payload'])
+        && d.type in ['COLLECTION']
+        && d.agentUid == request.auth.uid
+        && d.deviceId is string && d.deviceId.size() > 0 && d.deviceId.size() <= 128
+        && d.seq is int && d.seq >= 1
+        && d.capturedAt is string && d.capturedAt.size() <= 40
+        && d.appVersion is string && d.appVersion.size() <= 32
+        && d.payload is map;
+    }
+
+    // Agent offline queue. Document ID is the client-generated UUID v4.
+    match /commands/{commandId} {
+      allow create: if isAgent()
+        && isUuid(commandId)
+        && validCommandEnvelope(request.resource.data);
+      allow get, list: if isAgent() && resource.data.agentUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Read-only copies of an agent pair's route and members, for offline use.
+    match /agentPairs/{agentPairId}/{document=**} {
+      allow read: if isAgent() && request.auth.token.agentPairId == agentPairId;
+      allow write: if false;
+    }
+
+    // Live dashboard counters per branch, written by functions.
+    match /dashboards/branches/{branchId}/{document=**} {
+      allow read: if isHeadOffice() || (signedIn() && role() != 'AGENT' && hasBranch(branchId));
+      allow write: if false;
+    }
+
+    match /dashboards/company/{document=**} {
+      allow read: if isHeadOffice();
+      allow write: if false;
+    }
+
+    // Default: deny everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

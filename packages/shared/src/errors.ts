@@ -1,0 +1,23 @@
+/** Stable reason codes returned to clients. UI maps these to human messages. */
+export const REJECT_REASONS = [
+  'INVALID_COMMAND',
+  'DEVICE_NOT_BOUND',
+  'DEVICE_REVOKED',
+  'DEVICE_AGENT_MISMATCH',
+  'SEQUENCE_REUSED',
+  'MEMBER_NOT_FOUND',
+  'MEMBER_NOT_ACTIVE',
+  'ACCOUNT_NOT_FOUND',
+  'ACCOUNT_NOT_ACTIVE',
+  'ACCOUNT_OUTSIDE_BRANCH',
+  'AMOUNT_ABOVE_LIMIT',
+  'INSUFFICIENT_BALANCE',
+  'IDEMPOTENCY_CONFLICT',
+  'SELF_APPROVAL_FORBIDDEN',
+  'NOT_PERMITTED',
+  'ALREADY_REVERSED',
+  'NOT_FOUND',
+  'CONFLICT',
+] as const;
+
+export type RejectReason = (typeof REJECT_REASONS)[number];

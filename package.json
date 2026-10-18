@@ -1,0 +1,25 @@
+{
+  "name": "susu-platform",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "corepack pnpm -r run build",
+    "typecheck": "corepack pnpm -r run typecheck",
+    "test": "corepack pnpm -r run test",
+    "test:rules": "corepack pnpm --filter @susu/functions test:rules",
+    "test:pg": "corepack pnpm --filter @susu/functions test:pg"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs",
+      "@firebase/util"
+    ]
+  }
+}
