@@ -57,7 +57,7 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 
 1. **UI:** agent app hardening (4b), running in its own session.
 2. **Backend:** audit fixes H1, H2, M1–M8 (REQUESTS #3–#12), then the Step 3 read endpoints (REQUESTS #21–#24 pin down their shapes).
-3. **Both:** push to the repository above. The repo is public: make it private first (the Satoshi licence forbids public redistribution, and `outputs/` holds the commercial proposal and invoice). Then GitHub CI.
+3. **Both:** commit and push your own work to `origin/main` at each milestone. Next: GitHub CI. Note that the repo is public by the user's choice (it includes `outputs/` and the bundled Satoshi fonts, whose licence forbids public redistribution).
 4. **UI:** portal MFA enrolment (audit U5) and self-hosted Satoshi (U6).
 5. **UI:** cashier screens (item 5) against mocked Step 6 shapes.
 
@@ -78,4 +78,4 @@ cd apps/agent-android && ./gradlew :app:assembleDebug # JDK 17+, Android SDK wit
 - **2026-10-18** UI & Audit: portal shell and admin screens built and verified against the emulators; agent app written; first audit pass (`docs/audit/AUDIT-2026-10-18.md`, REQUESTS #3–#19).
 - **2026-10-19** UI & Audit: Android SDK installed; agent app builds and passed the offline → sync test on an emulator. Agent-app hardening split into its own session. This plan created.
 - **2026-10-19** UI & Audit: portal Members module done (list/search, register with KYC photo upload, maker-checker approval, profile with masked Ghana Card, open Susu account, statement, approvals queue, Susu products) and verified against the emulators. REQUESTS #21–#24 added.
-- **2026-10-19** UI & Audit: first UI commit on `main` (portal, agent app as of the hardening session's in-progress state, audit, plan). Push held because the repo is public (see Next up #3).
+- **2026-10-19** UI & Audit: first UI commit on `main` (portal, agent app as of the hardening session's in-progress state, audit, plan). Pushed to `origin/main` (public repo, by the user's choice).
