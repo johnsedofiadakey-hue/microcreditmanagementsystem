@@ -1,5 +1,6 @@
 node_modules/
-lib/
+# build output only — a bare `lib/` would also hide src/lib/
+/functions/lib/
 dist/
 .turbo/
 .next/
@@ -15,3 +16,7 @@ ui-debug.log*
 # generated renders
 work/*render*/
 work/client-guide-stormglide-*/
+
+# local secrets for the Functions emulator
+.secret.local
+functions/.secret.local

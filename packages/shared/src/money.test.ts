@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCedis, parseCedis } from './money.js';
+import { formatCedis, parseCedis } from './money';
 
 describe('formatCedis', () => {
   it('formats pesewas as cedis', () => {

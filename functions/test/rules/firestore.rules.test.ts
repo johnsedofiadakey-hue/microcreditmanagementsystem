@@ -6,7 +6,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
 const BRANCH = '0b1c8a52-7d64-4c5e-9f1a-2a3b4c5d6e7f';
@@ -47,6 +47,7 @@ function command(overrides: Record<string, unknown> = {}) {
     capturedAt: '2026-10-18T09:15:00+00:00',
     appVersion: '0.1.0',
     payload: { memberId: 'm', susuAccountId: 's', amountPesewas: 2000 },
+    sig: 'MEUCIQDexampleexampleexampleexampleexampleexampleexampleexample==',
     ...overrides,
   };
 }
@@ -63,6 +64,11 @@ describe('commands/{id} — the agent offline queue', () => {
   it('a command cannot carry server result fields', async () => {
     await assertFails(setDoc(doc(agent(), 'commands', COMMAND_ID), command({ status: 'POSTED' })));
     await assertFails(setDoc(doc(agent(), 'commands', COMMAND_ID), command({ postingId: 'x' })));
+  });
+
+  it('a command must carry a signature', async () => {
+    const { sig: _sig, ...unsigned } = command();
+    await assertFails(setDoc(doc(agent(), 'commands', COMMAND_ID), unsigned));
   });
 
   it('the document id must be a UUID v4', async () => {
@@ -93,6 +99,46 @@ describe('commands/{id} — the agent offline queue', () => {
     const anon = env.unauthenticatedContext().firestore();
     await assertFails(setDoc(doc(anon, 'commands', COMMAND_ID), command()));
     await assertFails(getDoc(doc(anon, 'commands', COMMAND_ID)));
+  });
+});
+
+const PUBLIC_KEY = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE' + 'A'.repeat(88);
+
+function enrollmentDoc(overrides: Record<string, unknown> = {}) {
+  return { agentUid: 'agent-a', publicKey: PUBLIC_KEY, attestationChain: [], enrolledAt: serverTimestamp(), ...overrides };
+}
+
+describe('deviceEnrollments/{deviceId} — the phone registers its signing key once', () => {
+  it('an agent can enrol a phone as themselves', async () => {
+    await assertSucceeds(setDoc(doc(agent(), 'deviceEnrollments', 'device-a'), enrollmentDoc()));
+    await assertSucceeds(getDoc(doc(agent(), 'deviceEnrollments', 'device-a')));
+  });
+
+  it('cannot enrol as another agent, add fields, or skip the server timestamp', async () => {
+    await assertFails(setDoc(doc(agent(), 'deviceEnrollments', 'device-a'), enrollmentDoc({ agentUid: 'agent-b' })));
+    await assertFails(setDoc(doc(agent(), 'deviceEnrollments', 'device-a'), enrollmentDoc({ trusted: true })));
+    await assertFails(setDoc(doc(agent(), 'deviceEnrollments', 'device-a'), enrollmentDoc({ enrolledAt: '2026-01-01' })));
+  });
+
+  it('an enrolment can never be replaced, edited or deleted', async () => {
+    await assertSucceeds(setDoc(doc(agent(), 'deviceEnrollments', 'device-a'), enrollmentDoc()));
+    await assertFails(setDoc(doc(agent(), 'deviceEnrollments', 'device-a'), enrollmentDoc()));
+    await assertFails(updateDoc(doc(agent(), 'deviceEnrollments', 'device-a'), { publicKey: PUBLIC_KEY }));
+    await assertFails(deleteDoc(doc(agent(), 'deviceEnrollments', 'device-a')));
+  });
+
+  it('other agents and staff cannot read an enrolment', async () => {
+    await assertSucceeds(setDoc(doc(agent(), 'deviceEnrollments', 'device-a'), enrollmentDoc()));
+    await assertFails(getDoc(doc(otherAgent(), 'deviceEnrollments', 'device-a')));
+    await assertFails(getDoc(doc(manager(), 'deviceEnrollments', 'device-a')));
+  });
+});
+
+describe('exceptions/{id}', () => {
+  it('head office reads, nobody writes', async () => {
+    await assertSucceeds(getDoc(doc(admin(), 'exceptions', 'command-x')));
+    await assertFails(getDoc(doc(manager(), 'exceptions', 'command-x')));
+    await assertFails(setDoc(doc(admin(), 'exceptions', 'command-x'), { status: 'RESOLVED' }));
   });
 });
 

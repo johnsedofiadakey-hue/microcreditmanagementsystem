@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { roleSchema } from './roles.js';
-import { susuFrequencySchema } from './enums.js';
+import { roleSchema } from './roles';
+import { susuFrequencySchema } from './enums';
 
 /** Request bodies for portal callable functions. Names match `docs/contracts/API.md`. */
 
@@ -42,6 +42,11 @@ export const revokeDeviceRequestSchema = z.object({
   deviceId: z.string().min(1).max(128),
   reason: z.string().trim().min(3).max(500),
 });
+export const getDeviceEnrollmentRequestSchema = z.object({
+  deviceId: z.string().min(1).max(128),
+});
+export type GetDeviceEnrollmentRequest = z.infer<typeof getDeviceEnrollmentRequestSchema>;
+
 export type RevokeDeviceRequest = z.infer<typeof revokeDeviceRequestSchema>;
 
 /** Ghana Card PIN format: GHA-123456789-0 */
@@ -59,14 +64,20 @@ export const ghanaPhoneSchema = z
   .transform((v) => (v.startsWith('0') ? `+233${v.slice(1)}` : v))
   .pipe(z.string().regex(/^\+233\d{9}$/, 'Phone must be a Ghana number like 024 123 4567'));
 
+/** `kyc-inbox/{uid}/{uuid}.{ext}`. The server additionally requires `{uid}` to be the caller. */
+export const KYC_INBOX_PATH = /^kyc-inbox\/[A-Za-z0-9_-]{1,128}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|webp)$/;
+
 export const registerMemberRequestSchema = z.object({
   branchId: z.uuid(),
   fullName: z.string().trim().min(2).max(160),
   phone: ghanaPhoneSchema,
   ghanaCardNumber: ghanaCardNumberSchema,
   dateOfBirth: z.iso.date(),
-  /** Storage paths under kyc-inbox/ for photos captured at registration. */
-  photoPaths: z.array(z.string().max(512)).max(6).default([]),
+  /**
+   * Photos captured at registration, uploaded first to `kyc-inbox/{caller uid}/{uuid}.{jpg|png|webp}`.
+   * The server checks each path belongs to the caller and moves it to `kyc/{memberId}/`.
+   */
+  photoPaths: z.array(z.string().regex(KYC_INBOX_PATH, 'Photo must be uploaded to kyc-inbox/{your uid}/{uuid}.jpg')).max(6).default([]),
   consentGiven: z.literal(true),
 });
 export type RegisterMemberRequest = z.input<typeof registerMemberRequestSchema>;

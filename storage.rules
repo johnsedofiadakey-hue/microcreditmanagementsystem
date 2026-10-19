@@ -10,12 +10,14 @@ service firebase.storage {
     }
 
     function canUploadKyc() {
-      return signedIn() && request.auth.token.role in ['AGENT', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'];
+      return signedIn() && request.auth.token.role in ['SUPER_ADMIN', 'AGENT', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'];
     }
 
     match /kyc-inbox/{uid}/{fileName} {
+      // fileName must be {uuid}.{jpg|jpeg|png|webp}, matching KYC_INBOX_PATH in @susu/shared.
       allow create: if canUploadKyc()
         && uid == request.auth.uid
+        && fileName.matches('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[.](jpg|jpeg|png|webp)$')
         && request.resource.size < 8 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
       allow read, update, delete: if false;

@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import type { AuthClaims, Role } from '@susu/shared';
+import { generateKeyPairSync, randomUUID, sign, type KeyObject } from 'node:crypto';
+import { commandSigningString, type AuthClaims, type Role } from '@susu/shared';
 import { migrate } from '../src/db/migrate.js';
 import { createPgliteDatabase } from '../src/db/pglite.js';
 import type { Database } from '../src/db/types.js';
@@ -7,7 +7,7 @@ import type { Actor } from '../src/lib/actor.js';
 import { approveMember, createSusuProduct, openSusuAccount, registerMember } from '../src/members/members.js';
 import { createAgentPair } from '../src/org/agentPairs.js';
 import { createBranch } from '../src/org/branches.js';
-import { bindDevice } from '../src/org/devices.js';
+import { bindDevice, type EnrollmentRecord } from '../src/org/devices.js';
 import { recordStaffUser } from '../src/org/staff.js';
 
 export async function freshDatabase(): Promise<Database> {
@@ -26,9 +26,27 @@ export function nextGhanaCard(): string {
   return `GHA-${ghanaCardCounter}-1`;
 }
 
-/** A branch with an admin, manager, cashier, two agents in a pair, a bound phone and one active member with a Susu account. */
+/** Stand-in for the phone's Android Keystore key: EC P-256, public key exported as SPKI DER base64. */
+export interface PhoneKey {
+  privateKey: KeyObject;
+  publicKeyBase64: string;
+}
+
+export function phoneKey(): PhoneKey {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  return { privateKey, publicKeyBase64: publicKey.export({ format: 'der', type: 'spki' }).toString('base64') };
+}
+
+export function enrollment(agentUid: string, key: PhoneKey): EnrollmentRecord {
+  return { agentUid, publicKey: key.publicKeyBase64 };
+}
+
+/** A branch with an admin, manager, cashier, two agents in a pair, an enrolled and bound phone, and one active member with a Susu account. */
 export async function seedBranch(db: Database) {
   const admin = actor('admin-1', 'SUPER_ADMIN');
+  await db.query(
+    `insert into staff_users (uid, email, display_name, role, created_by) values ('admin-1', 'admin-1@example.test', 'Admin', 'SUPER_ADMIN', 'system')`,
+  );
 
   const { branchId } = await db.transaction((tx) => createBranch(tx, admin, { name: 'Kumasi Central', code: 'KSI-01' }));
 
@@ -55,7 +73,10 @@ export async function seedBranch(db: Database) {
     createAgentPair(tx, manager, { branchId, name: 'Pair 1', agentAUid: 'agent-a', agentBUid: 'agent-b' }),
   );
   const deviceId = 'device-a';
-  await db.transaction((tx) => bindDevice(tx, manager, { deviceId, agentUid: 'agent-a', agentPairId }));
+  const key = phoneKey();
+  await db.transaction((tx) =>
+    bindDevice(tx, manager, { deviceId, agentUid: 'agent-a', agentPairId }, enrollment('agent-a', key)),
+  );
 
   const { productId } = await db.transaction((tx) =>
     createSusuProduct(tx, admin, { code: 'DAILY', name: 'Daily Susu', frequency: 'DAILY' }),
@@ -63,7 +84,7 @@ export async function seedBranch(db: Database) {
 
   const member = await addActiveMember(db, branchId, cashier, manager, productId);
 
-  return { admin, manager, cashier, branchId, agentPairId, deviceId, productId, ...member };
+  return { admin, manager, cashier, branchId, agentPairId, deviceId, key, productId, ...member };
 }
 
 export async function addActiveMember(db: Database, branchId: string, maker: Actor, checker: Actor, productId: string) {
@@ -82,16 +103,22 @@ export async function addActiveMember(db: Database, branchId: string, maker: Act
   return { memberId, susuAccountId };
 }
 
-export function collectionCommand(overrides: {
-  memberId: string;
-  susuAccountId: string;
-  amountPesewas?: number;
-  seq?: number;
-  deviceId?: string;
-  agentUid?: string;
-}) {
-  return {
-    type: 'COLLECTION',
+/** A COLLECTION command signed with `key`, exactly as the agent app builds it. Returns its ID and body. */
+export function signedCollection(
+  key: PhoneKey,
+  overrides: {
+    memberId: string;
+    susuAccountId: string;
+    amountPesewas?: number;
+    seq?: number;
+    deviceId?: string;
+    agentUid?: string;
+    id?: string;
+  },
+) {
+  const id = overrides.id ?? randomUUID();
+  const body = {
+    type: 'COLLECTION' as const,
     agentUid: overrides.agentUid ?? 'agent-a',
     deviceId: overrides.deviceId ?? 'device-a',
     seq: overrides.seq ?? 1,
@@ -103,6 +130,11 @@ export function collectionCommand(overrides: {
       amountPesewas: overrides.amountPesewas ?? 2_000,
     },
   };
+  const sig = sign('sha256', Buffer.from(commandSigningString(id, body), 'utf8'), {
+    key: key.privateKey,
+    dsaEncoding: 'der',
+  }).toString('base64');
+  return { id, body: { ...body, sig } };
 }
 
 export { randomUUID };

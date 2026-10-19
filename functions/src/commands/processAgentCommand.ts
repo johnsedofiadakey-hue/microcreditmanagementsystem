@@ -1,5 +1,6 @@
-import { agentCommandSchema, type AgentCommand, type CommandResult } from '@susu/shared';
+import { agentCommandSchema, commandSigningString, type AgentCommand, type CommandResult } from '@susu/shared';
 import type { Database, Queryable } from '../db/types.js';
+import { verifyDeviceSignature } from '../lib/deviceKeys.js';
 import { DomainError, isDomainError } from '../lib/errors.js';
 import { getDevice, type BoundDevice } from '../org/devices.js';
 import { postCollection } from './collection.js';
@@ -10,6 +11,8 @@ import { postCollection } from './collection.js';
  * - Business rejections return `{ status: 'REJECTED' }` and are recorded, so a retry gives the same answer.
  * - Infrastructure failures throw, so the Firestore trigger retries.
  * - Processing the same command twice returns the first result; money moves once.
+ * - Commands from one phone are processed one at a time (advisory lock per device), so racing
+ *   duplicates and sequence clashes resolve cleanly instead of through a constraint error.
  */
 export async function processAgentCommand(
   db: Database,
@@ -19,11 +22,14 @@ export async function processAgentCommand(
 ): Promise<CommandResult> {
   const serverTime = () => now().toISOString();
 
-  const previous = await loadPreviousResult(db, commandId);
-  if (previous) return previous;
+  if (!UUID.test(commandId)) {
+    return { status: 'REJECTED', reason: 'INVALID_COMMAND', message: 'Command ID must be a UUID', serverTime: serverTime() };
+  }
 
   const parsed = agentCommandSchema.safeParse(raw);
   if (!parsed.success) {
+    const previous = await loadPreviousResult(db, commandId);
+    if (previous) return previous;
     // Unparseable commands are not stored in agent_commands (fields may be missing); report and stop.
     return {
       status: 'REJECTED',
@@ -36,7 +42,11 @@ export async function processAgentCommand(
 
   try {
     return await db.transaction(async (tx) => {
-      const device = await authoriseDevice(tx, command);
+      await lockDevice(tx, command.deviceId);
+      const previous = await loadPreviousResult(tx, commandId);
+      if (previous) return previous;
+
+      const device = await authorise(tx, commandId, command);
       const posted = await dispatch(tx, commandId, command, device);
       await recordCommand(tx, commandId, command, 'POSTED', null, posted.batchId);
       return { status: 'POSTED', postingId: posted.batchId, serverTime: posted.postedAt } as const;
@@ -45,6 +55,7 @@ export async function processAgentCommand(
     if (!isDomainError(error)) throw error;
     // Record the rejection in its own transaction (the failed one rolled back).
     return db.transaction(async (tx) => {
+      await lockDevice(tx, command.deviceId);
       const again = await loadPreviousResult(tx, commandId);
       if (again) return again;
       const seqTaken = await tx.query('select 1 from agent_commands where device_id = $1 and seq = $2', [
@@ -59,12 +70,33 @@ export async function processAgentCommand(
   }
 }
 
-async function authoriseDevice(tx: Queryable, command: AgentCommand): Promise<BoundDevice> {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+async function lockDevice(tx: Queryable, deviceId: string): Promise<void> {
+  await tx.query(`select pg_advisory_xact_lock(hashtextextended('device:' || $1, 0))`, [deviceId]);
+}
+
+/**
+ * The phone must be bound and enrolled, the command must be signed by that phone's key, and the
+ * agent must still be active and still in the pair the phone is bound to.
+ */
+async function authorise(tx: Queryable, commandId: string, command: AgentCommand): Promise<BoundDevice> {
   const device = await getDevice(tx, command.deviceId);
   if (!device) throw new DomainError('DEVICE_NOT_BOUND', 'This phone is not registered to an agent');
-  if (device.status !== 'ACTIVE') throw new DomainError('DEVICE_REVOKED', 'This phone has been revoked');
+  if (!device.publicKey) {
+    throw new DomainError('DEVICE_NOT_ENROLLED', 'This phone has no signing key on record. Ask your supervisor to bind it again.');
+  }
   if (device.agentUid !== command.agentUid) {
     throw new DomainError('DEVICE_AGENT_MISMATCH', 'This phone is registered to a different agent');
+  }
+  if (!verifyDeviceSignature(device.publicKey, commandSigningString(commandId, command), command.sig)) {
+    throw new DomainError('INVALID_SIGNATURE', 'This record was not signed by the registered phone');
+  }
+  if (device.status !== 'ACTIVE') throw new DomainError('DEVICE_REVOKED', 'This phone has been revoked');
+  if (device.agentStatus !== 'ACTIVE') throw new DomainError('AGENT_NOT_ACTIVE', 'This agent account is not active');
+  if (device.pairStatus !== 'ACTIVE') throw new DomainError('AGENT_PAIR_NOT_ACTIVE', 'This agent pair is not active');
+  if (device.currentPairId !== device.agentPairId) {
+    throw new DomainError('AGENT_NOT_IN_PAIR', 'This agent has moved to another pair. Ask your supervisor to bind the phone again.');
   }
 
   const seq = await tx.query<{ id: string }>('select id from agent_commands where device_id = $1 and seq = $2', [

@@ -1,4 +1,5 @@
 import {
+  canAccessBranch,
   registerMemberRequestSchema,
   type ApproveMemberRequest,
   type CreateSusuProductRequest,
@@ -15,30 +16,64 @@ import { requireBranch, requireRole } from '../lib/permissions.js';
 const MEMBER_MAKERS = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR', 'AGENT'] as const;
 const MEMBER_CHECKERS = ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER'] as const;
 
+export interface PhotoMove {
+  from: string;
+  to: string;
+}
+
+/**
+ * Registers a pending member. Photos must have been uploaded by the caller to `kyc-inbox/{their uid}/`;
+ * the member record stores their final `kyc/{memberId}/` paths, and the caller moves the files after
+ * commit (returned as `photoMoves`). Only `kyc/{memberId}/` paths are ever signed for viewing.
+ */
 export async function registerMember(
   tx: Queryable,
   actor: Actor,
   raw: RegisterMemberRequest,
-): Promise<{ memberId: string }> {
+): Promise<{ memberId: string; photoMoves: PhotoMove[] }> {
   const input = registerMemberRequestSchema.parse(raw);
   requireRole(actor, MEMBER_MAKERS);
   requireBranch(actor, input.branchId);
 
-  const duplicate = await tx.query<{ id: string }>('select id from members where ghana_card_number = $1', [
-    input.ghanaCardNumber,
-  ]);
-  if (duplicate.rows[0]) {
-    throw new DomainError('CONFLICT', 'A member with this Ghana Card is already registered', {
-      memberId: duplicate.rows[0].id,
-    });
+  const ownInbox = `kyc-inbox/${actor.uid}/`;
+  for (const path of input.photoPaths) {
+    if (!path.startsWith(ownInbox)) {
+      throw new DomainError('INVALID_COMMAND', 'Photos must be uploaded from your own account', { path });
+    }
   }
 
-  const created = await tx.query<{ id: string }>(
-    `insert into members (branch_id, full_name, phone, ghana_card_number, date_of_birth, photo_paths, consent_at, created_by)
-     values ($1, $2, $3, $4, $5, $6::text[], now(), $7) returning id`,
-    [input.branchId, input.fullName, input.phone, input.ghanaCardNumber, input.dateOfBirth, input.photoPaths, actor.uid],
+  const duplicate = await tx.query<{ id: string; branch_id: string }>(
+    'select id, branch_id from members where ghana_card_number = $1',
+    [input.ghanaCardNumber],
   );
-  const memberId = created.rows[0]!.id;
+  if (duplicate.rows[0]) {
+    const visible = canAccessBranch(actor.claims, duplicate.rows[0].branch_id);
+    throw new DomainError(
+      'CONFLICT',
+      visible
+        ? 'A member with this Ghana Card is already registered'
+        : 'A member with this Ghana Card is already registered at another branch. Contact that branch.',
+      visible ? { memberId: duplicate.rows[0].id } : {},
+    );
+  }
+
+  const memberId = (await tx.query<{ id: string }>('select gen_random_uuid() as id')).rows[0]!.id;
+  const photoMoves = input.photoPaths.map((from) => ({ from, to: `kyc/${memberId}/${from.split('/').pop()}` }));
+
+  await tx.query(
+    `insert into members (id, branch_id, full_name, phone, ghana_card_number, date_of_birth, photo_paths, consent_at, created_by)
+     values ($1, $2, $3, $4, $5, $6, $7::text[], now(), $8)`,
+    [
+      memberId,
+      input.branchId,
+      input.fullName,
+      input.phone,
+      input.ghanaCardNumber,
+      input.dateOfBirth,
+      photoMoves.map((m) => m.to),
+      actor.uid,
+    ],
+  );
 
   await writeAudit(tx, {
     actorUid: actor.uid,
@@ -48,9 +83,9 @@ export async function registerMember(
     branchId: input.branchId,
     deviceId: actor.deviceId,
     channel: actor.channel,
-    data: { fullName: input.fullName },
+    data: { fullName: input.fullName, photoCount: photoMoves.length },
   });
-  return { memberId };
+  return { memberId, photoMoves };
 }
 
 /** Maker-checker: the person who registered a member cannot approve them (also database-enforced). */

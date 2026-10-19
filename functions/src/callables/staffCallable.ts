@@ -5,10 +5,16 @@ import type { z } from 'zod';
 import type { Database } from '../db/types.js';
 import type { Actor } from '../lib/actor.js';
 import { isDomainError } from '../lib/errors.js';
+import { assertStaffActive } from '../org/staff.js';
 import { DATABASE_URL, REGION, getDatabase } from '../runtime.js';
 
 const STATUS_BY_REASON: Record<string, ConstructorParameters<typeof HttpsError>[0]> = {
   NOT_PERMITTED: 'permission-denied',
+  STAFF_NOT_ACTIVE: 'permission-denied',
+  AGENT_NOT_IN_PAIR: 'failed-precondition',
+  AGENT_NOT_ACTIVE: 'failed-precondition',
+  DEVICE_NOT_ENROLLED: 'failed-precondition',
+  DEVICE_AGENT_MISMATCH: 'failed-precondition',
   SELF_APPROVAL_FORBIDDEN: 'permission-denied',
   NOT_FOUND: 'not-found',
   MEMBER_NOT_FOUND: 'not-found',
@@ -21,8 +27,8 @@ const STATUS_BY_REASON: Record<string, ConstructorParameters<typeof HttpsError>[
 };
 
 /**
- * Wraps a portal action: verifies App Check and auth, parses claims and input with Zod, runs the
- * handler, and turns DomainErrors into typed HttpsErrors (`details.reason` carries the reason code).
+ * Wraps a portal action: verifies App Check and auth, parses claims and input with Zod, checks the
+ * live staff record (active, same role and branches as the token), runs the handler, and turns DomainErrors into typed HttpsErrors (`details.reason` carries the reason code).
  */
 export function staffCallable<S extends z.ZodType, R>(
   schema: S,
@@ -43,7 +49,9 @@ export function staffCallable<S extends z.ZodType, R>(
 
     const actor: Actor = { uid: request.auth.uid, claims: claims.data, channel: 'PORTAL' };
     try {
-      return await handler({ db: getDatabase(), actor, input: input.data, request });
+      const db = getDatabase();
+      await assertStaffActive(db, actor);
+      return await handler({ db, actor, input: input.data, request });
     } catch (error) {
       if (isDomainError(error)) {
         throw new HttpsError(STATUS_BY_REASON[error.reason] ?? 'failed-precondition', error.message, {

@@ -148,8 +148,9 @@ Agent phone (offline OK)                 Firebase (server)
 ```
 
 Why this is safe:
-- **Duplicates:** the Firestore document ID is the client UUID, and the ledger rejects a second posting with the same key. Triggers can run more than once; the money only moves once.
-- **Ordering:** each device numbers its commands (`seq`); the server holds out-of-order ones as pending.
+- **Duplicates:** the Firestore document ID is the client UUID, and the ledger rejects a second posting with the same key. Triggers can run more than once; the money only moves once. Commands from one phone are processed one at a time (advisory lock per device).
+- **Proof of origin (since 19 Oct):** each phone holds a non-exportable Android Keystore key, enrolled at first launch and captured when a supervisor binds the phone (after comparing a fingerprint). Every command is signed; stolen credentials alone can't post collections.
+- **Ordering:** each device numbers its commands (`seq`). Collections are independent, so they post in any order; a reused `seq` is refused. Gaps are reported on the supervisor's sync-health view (planned) rather than blocking, because a crash can legitimately leave one.
 - **Server time is official time.** The phone's clock is recorded but never trusted.
 - **Agents can't edit or delete** a saved collection; rules forbid it. Corrections are reversals done in the portal with approval.
 - **Known limits:** Firestore's offline cache is not encrypted by itself, so phones must be managed devices with device encryption and a screen lock; pending items are lost if the app's data is wiped, so the app shows a count of unsynced items and blocks logout until it's zero. Photos don't queue in Firestore, so WorkManager uploads them to Storage when online.

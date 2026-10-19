@@ -18,8 +18,9 @@ export async function createAgentPair(
     throw new DomainError('INVALID_COMMAND', 'An agent pair needs two different agents');
   }
 
+  // Lock both agents first so two concurrent pairings of the same agent run one after the other.
   const agents = await tx.query<{ uid: string; role: string; branch_ids: string[]; status: string }>(
-    'select uid, role, branch_ids, status from staff_users where uid = any($1::text[])',
+    'select uid, role, branch_ids, status from staff_users where uid = any($1::text[]) order by uid for update',
     [[input.agentAUid, input.agentBUid]],
   );
   if (agents.rowCount !== 2) throw new DomainError('NOT_FOUND', 'Both agents must exist as staff users');
@@ -29,11 +30,9 @@ export async function createAgentPair(
     }
   }
 
-  const busy = await tx.query(
-    `select 1 from agent_pairs
-      where status = 'ACTIVE' and (agent_a_uid = any($1::text[]) or agent_b_uid = any($1::text[]))`,
-    [[input.agentAUid, input.agentBUid]],
-  );
+  const busy = await tx.query('select 1 from agent_pair_members where agent_uid = any($1::text[])', [
+    [input.agentAUid, input.agentBUid],
+  ]);
   if (busy.rowCount > 0) throw new DomainError('CONFLICT', 'One of these agents is already in an active pair');
 
   const created = await tx.query<{ id: string }>(
@@ -42,6 +41,12 @@ export async function createAgentPair(
     [input.branchId, input.name, input.agentAUid, input.agentBUid, actor.uid],
   );
   const agentPairId = created.rows[0]!.id;
+  // Primary key on agent_uid: the database refuses a second active pair for the same agent.
+  await tx.query('insert into agent_pair_members (agent_uid, agent_pair_id) values ($1, $3), ($2, $3)', [
+    input.agentAUid,
+    input.agentBUid,
+    agentPairId,
+  ]);
 
   await ensureLedgerAccount(tx, {
     kind: 'AGENT_CASH_CUSTODY',

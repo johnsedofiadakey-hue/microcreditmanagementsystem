@@ -35,15 +35,25 @@ service cloud.firestore {
     }
 
     function validCommandEnvelope(d) {
-      return d.keys().hasOnly(['type', 'agentUid', 'deviceId', 'seq', 'capturedAt', 'appVersion', 'payload'])
-        && d.keys().hasAll(['type', 'agentUid', 'deviceId', 'seq', 'capturedAt', 'appVersion', 'payload'])
+      return d.keys().hasOnly(['type', 'agentUid', 'deviceId', 'seq', 'capturedAt', 'appVersion', 'payload', 'sig'])
+        && d.keys().hasAll(['type', 'agentUid', 'deviceId', 'seq', 'capturedAt', 'appVersion', 'payload', 'sig'])
         && d.type in ['COLLECTION']
         && d.agentUid == request.auth.uid
         && d.deviceId is string && d.deviceId.size() > 0 && d.deviceId.size() <= 128
         && d.seq is int && d.seq >= 1
         && d.capturedAt is string && d.capturedAt.size() <= 40
         && d.appVersion is string && d.appVersion.size() <= 32
-        && d.payload is map;
+        && d.payload is map
+        && d.sig is string && d.sig.size() >= 16 && d.sig.size() <= 200;
+    }
+
+    function validEnrollment(d) {
+      return d.keys().hasOnly(['agentUid', 'publicKey', 'attestationChain', 'enrolledAt'])
+        && d.keys().hasAll(['agentUid', 'publicKey', 'attestationChain', 'enrolledAt'])
+        && d.agentUid == request.auth.uid
+        && d.publicKey is string && d.publicKey.size() >= 80 && d.publicKey.size() <= 400
+        && d.attestationChain is list && d.attestationChain.size() <= 10
+        && d.enrolledAt == request.time;
     }
 
     // Agent offline queue. Document ID is the client-generated UUID v4.
@@ -53,6 +63,22 @@ service cloud.firestore {
         && validCommandEnvelope(request.resource.data);
       allow get, list: if isAgent() && resource.data.agentUid == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    // The phone's signing key, written once at first launch. A supervisor compares its fingerprint
+    // with the phone's screen before binding. Never editable: a new key means a new enrolment.
+    match /deviceEnrollments/{deviceId} {
+      allow create: if isAgent()
+        && deviceId.size() > 0 && deviceId.size() <= 128
+        && validEnrollment(request.resource.data);
+      allow get: if isAgent() && resource.data.agentUid == request.auth.uid;
+      allow list, update, delete: if false;
+    }
+
+    // Failed commands and reconciliation alerts, written by functions.
+    match /exceptions/{exceptionId} {
+      allow read: if isHeadOffice();
+      allow write: if false;
     }
 
     // Read-only copies of an agent pair's route and members, for offline use.

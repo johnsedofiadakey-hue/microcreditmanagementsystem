@@ -6,7 +6,7 @@ fixed shape you can build screens against with mocked data behind a `// TODO(api
 Types and validation for everything here live in `packages/shared/src/` (`@susu/shared`).
 **All amounts are integer pesewas.** Display with `formatCedis()`; parse user input with `parseCedis()`.
 
-Last updated: 18 October 2026.
+Last updated: 19 October 2026 — audit hardening (signed commands, device enrolment, live staff checks). Changes are marked **changed 19 Oct**.
 
 ---
 
@@ -25,6 +25,7 @@ type AuthClaims = {
 - No `role` claim ⇒ show "Your account is not set up yet. Contact your administrator."
 - Staff accounts are created by an admin (`createStaffUser`); the person receives a password-setup link. There is no self sign-up.
 - Claims change when an admin edits a user; call `getIdToken(true)` after role-changing actions.
+- **changed 19 Oct:** every callable also checks the live staff record. A disabled user, or one whose role or branches no longer match their token, gets `permission-denied` with `reason: STAFF_NOT_ACTIVE` — show "Your access has changed. Sign out and sign in again." A first admin must exist in both Auth and `staff_users`; locally, `seed:local` does that (§6).
 
 ## 2. Portal callable functions
 
@@ -38,9 +39,10 @@ Call with `httpsCallable(functions, '<name>')`. App Check is enforced. Errors ar
 | `createBranch` | `createBranchRequestSchema` `{ name, code }` | `{ branchId }` | SUPER_ADMIN | **built** |
 | `createStaffUser` | `createStaffUserRequestSchema` `{ email, displayName, role, branchIds }` | `{ uid, passwordSetupLink }` | SUPER_ADMIN; BRANCH_MANAGER for CASHIER/SUPERVISOR/AGENT in own branches | **built** |
 | `createAgentPair` | `createAgentPairRequestSchema` `{ branchId, name, agentAUid, agentBUid }` | `{ agentPairId }` | SUPER_ADMIN, BRANCH_MANAGER | **built** |
-| `bindDevice` | `bindDeviceRequestSchema` `{ deviceId, agentUid, agentPairId, label? }` | `null` | SUPER_ADMIN, BRANCH_MANAGER, SUPERVISOR | **built** |
+| `getDeviceEnrollment` | `getDeviceEnrollmentRequestSchema` `{ deviceId }` | `{ deviceId, agentUid, keyFingerprint }` — show the fingerprint and ask the supervisor to confirm it matches the phone screen before binding | SUPER_ADMIN, BRANCH_MANAGER, SUPERVISOR (agent's branch) | **built — new 19 Oct** |
+| `bindDevice` | `bindDeviceRequestSchema` `{ deviceId, agentUid, agentPairId, label? }` | `{ keyFingerprint }` — **changed 19 Oct**: the phone must have enrolled first (§3a), else `DEVICE_NOT_ENROLLED`; enrolled by another agent ⇒ `DEVICE_AGENT_MISMATCH`; agent not in that pair ⇒ `AGENT_NOT_IN_PAIR` | SUPER_ADMIN, BRANCH_MANAGER, SUPERVISOR | **built** |
 | `revokeDevice` | `revokeDeviceRequestSchema` `{ deviceId, reason }` | `null` | SUPER_ADMIN, BRANCH_MANAGER, SUPERVISOR | **built** |
-| `registerMember` | `registerMemberRequestSchema` `{ branchId, fullName, phone, ghanaCardNumber, dateOfBirth, photoPaths?, consentGiven: true }` | `{ memberId }` | SUPER_ADMIN, BRANCH_MANAGER, CASHIER, SUPERVISOR, AGENT | **built** |
+| `registerMember` | `registerMemberRequestSchema` `{ branchId, fullName, phone, ghanaCardNumber, dateOfBirth, photoPaths?, consentGiven: true }` | `{ memberId }` — **changed 19 Oct**: each `photoPaths` entry must be `kyc-inbox/{your uid}/{uuid}.{jpg,jpeg,png,webp}` and already uploaded (§5); a duplicate Ghana Card at another branch returns `CONFLICT` without that member's ID | SUPER_ADMIN, BRANCH_MANAGER, CASHIER, SUPERVISOR, AGENT | **built** |
 | `approveMember` | `approveMemberRequestSchema` `{ memberId }` | `null` | SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER — **not** the person who registered them | **built** |
 | `createSusuProduct` | `createSusuProductRequestSchema` `{ code, name, frequency }` | `{ productId, version }` | SUPER_ADMIN | **built** |
 | `openSusuAccount` | `openSusuAccountRequestSchema` `{ memberId, productId }` | `{ susuAccountId }` | SUPER_ADMIN, BRANCH_MANAGER, CASHIER | **built** |
@@ -60,13 +62,13 @@ the phone reconnects; a Cloud Function posts it and writes the result back onto 
 
 **Path:** `commands/{commandId}` — `commandId` is a **UUID v4** generated once per action and reused on retries.
 
-**Client writes exactly these fields, nothing else** (rules reject extra keys):
+**Client writes exactly these fields, nothing else** (rules reject extra or missing keys):
 
 ```json
 {
   "type": "COLLECTION",
   "agentUid": "<request.auth.uid>",
-  "deviceId": "<stable per-install id, the one bound via bindDevice>",
+  "deviceId": "<stable per-install id, the one enrolled in §3a and bound via bindDevice>",
   "seq": 42,
   "capturedAt": "2026-10-18T09:15:00+00:00",
   "appVersion": "0.1.0",
@@ -74,7 +76,8 @@ the phone reconnects; a Cloud Function posts it and writes the result back onto 
     "memberId": "<uuid>",
     "susuAccountId": "<uuid>",
     "amountPesewas": 2000
-  }
+  },
+  "sig": "<base64 DER ECDSA signature — changed 19 Oct, required>"
 }
 ```
 
@@ -82,18 +85,51 @@ the phone reconnects; a Cloud Function posts it and writes the result back onto 
 - `amountPesewas`: integer, 1 … 1,000,000 (GH₵ 10,000 cap until product rules are agreed).
 - Agent pair and branch are **not** sent; the server derives them from the device binding.
 
+### Signing every command — **changed 19 Oct (audit H2)**
+
+The phone signs each command with its Keystore key (§3a). Build this exact UTF-8 string, sign it with
+`Signature.getInstance("SHA256withECDSA")`, and send the DER signature base64-encoded (no line breaks) as `sig`:
+
+```
+susu-cmd-v1|{commandId}|{type}|{agentUid}|{deviceId}|{seq}|{capturedAt}|{canonicalJson(payload)}
+```
+
+- `commandId`: the Firestore document ID, lower-case UUID. `seq` in decimal. `capturedAt`: the exact string you send.
+- `canonicalJson(payload)`: keys sorted alphabetically, no whitespace, integers as plain digits, strings JSON-escaped. For a collection it is always
+  `{"amountPesewas":2000,"memberId":"…","susuAccountId":"…"}`.
+- Reference implementation: `commandSigningString()` and `canonicalJson()` in `@susu/shared`; the server verifies in `functions/src/lib/deviceKeys.ts`.
+- A wrong or missing signature ⇒ `REJECTED` with `INVALID_SIGNATURE` (or `INVALID_COMMAND` if `sig` is absent).
+
+### 3a. Device enrolment — `deviceEnrollments/{deviceId}` — **new 19 Oct**
+
+At first launch, before a supervisor binds the phone:
+1. Generate a **non-exportable EC P-256 key** in the Android Keystore (`KeyGenParameterSpec`, `PURPOSE_SIGN`, `DIGEST_SHA256`, `setAttestationChallenge(deviceId bytes)` so a certificate chain is produced; StrongBox when available).
+2. Write once (the rules allow create only, never update):
+   ```json
+   { "agentUid": "<auth uid>", "publicKey": "<base64 of publicKey.encoded (X.509 SPKI DER)>",
+     "attestationChain": ["<base64 DER cert>", "…"], "enrolledAt": <serverTimestamp()> }
+   ```
+3. Show the **key fingerprint** on screen for the supervisor: SHA-256 of the SPKI DER bytes, first 16 hex characters, upper-case, grouped `ABCD-EF01-2345-6789`. The portal shows the same value from `getDeviceEnrollment` / `bindDevice`.
+
+A reinstall means a new key: give it a **new `deviceId`**, enrol again, and have the supervisor bind it (the old binding is revoked automatically).
+Attestation chains are stored for verification in a later step; Play Integrity App Check enforcement is on the deploy checklist (`docs/ops/ENVIRONMENT_CHECKLIST.md`).
+
 **Server adds (listen with `onSnapshot`):**
 
 | `status` | Extra fields | Show the agent |
 |---|---|---|
 | *(absent)* | — | `Pending sync` (also when `snapshot.metadata.hasPendingWrites`) |
-| `POSTED` | `postingId`, `serverTime` | `Synced ✓` and receipt reference = first 8 chars of `postingId`, upper-case |
-| `REJECTED` | `reason`, `message`, `serverTime` | The `message`, plus guidance by `reason` (below) |
-| `FAILED` | `message`, `serverTime` | "Could not be processed. Your supervisor has been notified." |
+| `POSTED` | `postingId`, `serverTime`, `processedAt` | `Synced ✓` and receipt reference = first 8 chars of `postingId`, upper-case |
+| `REJECTED` | `reason`, `message`, `serverTime`, `processedAt` | The `message`, plus guidance by `reason` (below) |
+| `FAILED` | `message`, `serverTime`, `processedAt` | **changed 19 Oct:** "Not processed yet. It will be retried automatically — do not enter it again." A sweeper retries every 15 minutes and later sets `POSTED` or `REJECTED` on the same document |
 
-Rejection reasons the agent app should handle: `DEVICE_NOT_BOUND`, `DEVICE_REVOKED`, `DEVICE_AGENT_MISMATCH`
-(sign out and contact supervisor) · `MEMBER_NOT_ACTIVE`, `ACCOUNT_NOT_ACTIVE`, `ACCOUNT_OUTSIDE_BRANCH`, `ACCOUNT_NOT_FOUND`
-(member can't be collected from — refer to branch) · `INVALID_COMMAND`, `SEQUENCE_REUSED` (app bug — report).
+`processedAt` is a Firestore server `Timestamp`; `serverTime` is the ISO string from the ledger.
+
+Rejection reasons the agent app should handle:
+- `DEVICE_NOT_BOUND`, `DEVICE_NOT_ENROLLED`, `DEVICE_REVOKED`, `DEVICE_AGENT_MISMATCH`, `AGENT_NOT_IN_PAIR` — this phone can't post: stop new collections, ask the supervisor to (re)bind it.
+- `AGENT_NOT_ACTIVE`, `AGENT_PAIR_NOT_ACTIVE` — account or pair switched off: sign out and contact the supervisor.
+- `MEMBER_NOT_ACTIVE`, `ACCOUNT_NOT_ACTIVE`, `ACCOUNT_OUTSIDE_BRANCH`, `ACCOUNT_NOT_FOUND` — the member can't be collected from; refer them to the branch.
+- `INVALID_SIGNATURE`, `INVALID_COMMAND`, `SEQUENCE_REUSED` — an app bug or tampering: report it.
 
 Planned command types, same envelope: `HANDOVER_START` (Step 6), `WITHDRAWAL_REQUEST` (Step 6), `MEMBER_REGISTRATION` (Step 4).
 
@@ -102,6 +138,9 @@ Planned command types, same envelope: `HANDOVER_START` (Step 6), `WITHDRAWAL_REQ
 | Path | Who reads | Contents | Status |
 |---|---|---|---|
 | `commands/{id}` | the agent who wrote it | §3 | **built** |
+| `deviceEnrollments/{deviceId}` | the agent who wrote it (create once) | §3a | **built — new 19 Oct** |
+| `exceptions/{id}` | head office | `{ kind: 'COMMAND_FAILED' \| 'BALANCE_MISMATCH', status: 'OPEN' \| 'RESOLVED', openedAt, … }` — failed commands (`commandId`, `agentUid`, `deviceId`, `error`) and nightly reconciliation alerts (`count`, `sample`) | **built — new 19 Oct** |
+| `dashboards/company/live/exceptions` | head office | `{ openCommandFailures }` | **built — new 19 Oct** |
 | `agentPairs/{agentPairId}/routes/{yyyy-mm-dd}` | agents in that pair | `{ members: [{ memberId, susuAccountId, fullName, phoneMasked, expectedPesewas }] }` | planned — Step 4 |
 | `agentPairs/{agentPairId}/memberSnapshots/{memberId}` | agents in that pair | `{ fullName, phoneMasked, ghanaCardMasked, photoUrl?, accounts: [{ id, productName, status }] }` | planned — Step 4 |
 | `dashboards/branches/{branchId}/days/{yyyy-mm-dd}` | that branch's non-agent staff, head office | `{ collectedPesewas, collectionCount, activePairs, handedOverPesewas, pendingSyncCount, closed }` | planned — Step 7 |
@@ -109,17 +148,22 @@ Planned command types, same envelope: `HANDOVER_START` (Step 6), `WITHDRAWAL_REQ
 
 Security rules already allow these reads, so UI can be built against the emulator with seeded docs.
 
-## 5. Storage — KYC photos — **rules built**
+## 5. Storage — KYC photos — **rules built, changed 19 Oct**
 
-Upload member photos and Ghana Card images to `kyc-inbox/{request.auth.uid}/{uuid}.jpg` (JPEG/PNG/WebP, < 8 MB).
-Pass the resulting paths in `registerMember.photoPaths`. Nobody can read them back from the client;
-the portal will get short-lived signed URLs from `getMember` (planned).
+Upload member photos and Ghana Card images to `kyc-inbox/{request.auth.uid}/{uuid}.{jpg|jpeg|png|webp}`, under 8 MB
+(SUPER_ADMIN may upload too). Pass the resulting paths in `registerMember.photoPaths`. The server checks they exist and are yours,
+then moves them to `kyc/{memberId}/`. Nobody can read them back from the client; the portal will get short-lived
+signed URLs, only ever for `kyc/{memberId}/` paths, from `getMember` (planned).
 
-## 6. Local development
+## 6. Local development — **changed 19 Oct**
 
 ```bash
 corepack pnpm install
-firebase emulators:start          # Auth 9099, Firestore 8080, Functions 5001, Storage 9199, UI 4000
+createdb susu_dev
+cp functions/.secret.local.example functions/.secret.local   # DATABASE_URL for the Functions emulator
+cp functions/.env.example functions/.env.local               # FUNCTIONS_REGION
+firebase emulators:start --project demo-susu                 # always a demo- project locally: never touches production
+corepack pnpm --filter @susu/functions seed:local            # migrates susu_dev, creates admin@susu.test in Auth + staff_users, demo branch + product
 ```
-Functions need `DATABASE_URL` for a local Postgres (e.g. `postgresql:///susu_dev`); set it in
-`functions/.secret.local` for the emulator. A seed script for demo data is planned (Step 3).
+`seed:local` replaces `apps/portal/scripts/seed-emulator.mjs`; that script only creates the Auth half, which callables now refuse (`STAFF_NOT_ACTIVE`).
+To apply new migrations to an existing database: `DATABASE_URL=postgresql:///susu_dev corepack pnpm --filter @susu/functions migrate`.

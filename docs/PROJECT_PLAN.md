@@ -29,15 +29,15 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 | Step | Status | Notes |
 |---|---|---|
 | 1 Foundation | ✅ local | Monorepo, Firebase config, claims, org model, audit log, rules tests. Firebase projects and CI not created yet |
-| 2 Ledger core | ✅ | Posting, idempotency, reversals, append-only. Audit H1 and M4 still open |
+| 2 Ledger core | ✅ | Posting, idempotency, reversals, append-only. Hardened 19 Oct (migration 002): balances move only via journal triggers, committed batches frozen, reversals must mirror, nightly reconciliation |
 | 3 Members & Susu accounts | 🟡 | Writes built. Read endpoints planned: `searchMembers`, `getMember`, `getAccountStatement`, `listPendingApprovals`, `listAuditEvents`, `listBranches`, `listStaff` |
-| 4 Offline collections | ✅ backend | Command queue → trigger → ledger → SMS outbox. Route/member-snapshot read models still planned |
+| 4 Offline collections | ✅ backend | Command queue → trigger → ledger → SMS outbox. **Commands are signed by the phone's Keystore key since 19 Oct** (agent app must enrol + sign, REQUESTS #25). FAILED commands retried every 15 min. Route/member-snapshot read models still planned |
 | 5 SMS receipts | ⏳ | |
 | 6 Handover, branch close, withdrawals | ⏳ | |
 | 7 Bank match, dashboards | ⏳ | |
 | 8 Ghana Card verification | ⏳ | Waiting on the NIA provider |
 | 9 Migration, UAT, pilot | ⏳ | |
-| Audit fixes (REQUESTS #3–#19) | ⏳ | 2 high, 8 medium, 7 low — `docs/audit/AUDIT-2026-10-18.md` |
+| Audit fixes (REQUESTS #3–#19) | ✅ mostly | Done 19 Oct: H1, H2 (server side), M1–M8, L2–L5, #17–#19. Open: L1 seq-gap reporting, attestation-chain verification, approvals table (Step 6). Contract changes for UI: REQUESTS #25 |
 
 ### UI (brief build order)
 
@@ -56,7 +56,8 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 ## Next up
 
 1. **UI:** agent app hardening (4b), running in its own session.
-2. **Backend:** audit fixes H1, H2, M1–M8 (REQUESTS #3–#12), then the Step 3 read endpoints (REQUESTS #21–#24 pin down their shapes).
+2. **Backend:** Step 3 read endpoints (REQUESTS #15, #21–#24), the `devices/{id}` and sync-health read models (#16, with L1), then Step 5 SMS dispatcher.
+   **UI:** pick up the 19 Oct contract changes (REQUESTS #25): six new reason messages (portal typecheck fails until added), agent-app enrolment + signing, fingerprint check before binding.
 3. **Both:** commit and push your own work to `origin/main` at each milestone. Next: GitHub CI. Note that the repo is public by the user's choice (it includes `outputs/` and the bundled Satoshi fonts, whose licence forbids public redistribution).
 4. **UI:** portal MFA enrolment (audit U5) and self-hosted Satoshi (U6).
 5. **UI:** cashier screens (item 5) against mocked Step 6 shapes.
@@ -65,9 +66,10 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 
 ```bash
 corepack pnpm install
-createdb susu_dev        # then apply functions/src/db/migrations/001_core.ts (no migrate script yet, REQUESTS #14)
-DATABASE_URL=postgresql:///susu_dev firebase emulators:start --project demo-susu
-node apps/portal/scripts/seed-emulator.mjs            # admin@susu.test (password in that file)
+createdb susu_dev
+cp functions/.secret.local.example functions/.secret.local && cp functions/.env.example functions/.env.local
+firebase emulators:start --project demo-susu
+corepack pnpm --filter @susu/functions seed:local    # migrates, creates admin@susu.test in Auth + staff_users (password in functions/scripts/seed-local.ts)
 corepack pnpm --filter portal dev                     # http://localhost:3000
 cd apps/agent-android && ./gradlew :app:assembleDebug # JDK 17+, Android SDK with platform 37
 ```
@@ -79,3 +81,4 @@ cd apps/agent-android && ./gradlew :app:assembleDebug # JDK 17+, Android SDK wit
 - **2026-10-19** UI & Audit: Android SDK installed; agent app builds and passed the offline → sync test on an emulator. Agent-app hardening split into its own session. This plan created.
 - **2026-10-19** UI & Audit: portal Members module done (list/search, register with KYC photo upload, maker-checker approval, profile with masked Ghana Card, open Susu account, statement, approvals queue, Susu products) and verified against the emulators. REQUESTS #21–#24 added.
 - **2026-10-19** UI & Audit: first UI commit on `main` (portal, agent app as of the hardening session's in-progress state, audit, plan). Pushed to `origin/main` (public repo, by the user's choice).
+- **2026-10-19** Backend: audit fixes — migration `002_hardening` (H1, L3, M3, M4, M5), signed agent commands + device enrolment (H2), live staff checks (M1), createStaffUser order (M2), KYC path checks (M6), agent/pair checks (M7), failed-command exceptions + sweeper (M8), per-device lock (L2), local `migrate`/`seed:local` (L5, #19), `docs/ops/ENVIRONMENT_CHECKLIST.md` (L6). 65 unit + 2 Postgres + 18 rules tests green. Contract changes listed in REQUESTS #25.

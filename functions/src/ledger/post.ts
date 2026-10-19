@@ -65,6 +65,11 @@ function validateLines(lines: PostingLine[]): void {
   }
 }
 
+function signedDelta(line: PostingLine, accounts: Map<string, LockedAccount>): number {
+  const account = accounts.get(line.accountId)!;
+  return line.side === account.normal_side ? line.amountPesewas : -line.amountPesewas;
+}
+
 function requestHash(request: PostingRequest): string {
   return sha256({
     kind: request.kind,
@@ -83,7 +88,8 @@ function requestHash(request: PostingRequest): string {
  * 1. Claim the idempotency key (a replay returns the original batch).
  * 2. Lock the affected balance rows in a fixed order (no deadlocks between concurrent postings).
  * 3. Reject if any non-negative account would go below zero.
- * 4. Append lines and move balances. The database re-checks that the batch balances at commit.
+ * 4. Append lines. Database triggers move the balances, refuse a negative non-negative account,
+ *    and re-check at commit that the batch balances (and, for a reversal, mirrors its original).
  */
 export async function postJournal(tx: Queryable, request: PostingRequest): Promise<PostingResult> {
   validateLines(request.lines);
@@ -163,9 +169,12 @@ export async function postJournal(tx: Queryable, request: PostingRequest): Promi
     }
   }
 
+  // Lines that increase a balance go first, so an account debited and credited in one batch never
+  // dips below zero part-way through. The journal_lines trigger moves the balances (migration 002).
+  const ordered = [...request.lines].sort((a, b) => signedDelta(b, byId) - signedDelta(a, byId));
   const values: string[] = [];
   const params: unknown[] = [batch.id];
-  request.lines.forEach((line, i) => {
+  ordered.forEach((line, i) => {
     values.push(`($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`);
     params.push(line.accountId, line.side, line.amountPesewas);
   });
@@ -173,15 +182,6 @@ export async function postJournal(tx: Queryable, request: PostingRequest): Promi
     `insert into journal_lines (batch_id, account_id, side, amount_pesewas) values ${values.join(', ')}`,
     params,
   );
-
-  for (const [accountId, delta] of deltas) {
-    await tx.query(
-      `update account_balances
-          set balance_pesewas = balance_pesewas + $2, version = version + 1, updated_at = now()
-        where account_id = $1`,
-      [accountId, delta],
-    );
-  }
 
   return { batchId: batch.id, postedAt: new Date(batch.posted_at).toISOString(), replayed: false };
 }
