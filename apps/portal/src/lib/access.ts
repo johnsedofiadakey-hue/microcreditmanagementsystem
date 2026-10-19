@@ -40,8 +40,8 @@ export const can = {
   approveMember: (role: Role) => ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER'].includes(role),
   openSusuAccount: (role: Role) => ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'].includes(role),
   createProduct: (role: Role) => role === 'SUPER_ADMIN',
-  /** storage.rules canUploadKyc. SUPER_ADMIN is excluded there (audit L7). */
-  uploadKyc: (role: Role) => ['BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'].includes(role),
+  /** storage.rules canUploadKyc (API.md §5). */
+  uploadKyc: (role: Role) => ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'].includes(role),
   /** Full Ghana Card number on the member profile. Everyone else sees GHA-•••••••••-3. */
   seeFullGhanaCard: (role: Role) => ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER'].includes(role),
 };

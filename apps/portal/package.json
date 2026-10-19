@@ -4,11 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --webpack --port 3000",
-    "build": "next build --webpack",
+    "dev": "next dev --port 3000",
+    "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit",
-    "seed:emulator": "node scripts/seed-emulator.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@susu/shared": "workspace:*",

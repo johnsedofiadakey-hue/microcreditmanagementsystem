@@ -11,6 +11,7 @@ import {
 } from '@susu/shared';
 import { httpsCallable } from 'firebase/functions';
 import { ref, uploadBytes } from 'firebase/storage';
+import { withoutUndefined } from './api';
 import { firebase } from './firebase';
 import { mockMembers, type MockStatementLine } from './mock-members';
 import { maskGhanaCard } from './utils';
@@ -21,7 +22,7 @@ import { maskGhanaCard } from './utils';
  */
 
 async function call<Req, Res>(name: string, data: Req): Promise<Res> {
-  const result = await httpsCallable<Req, Res>(firebase().functions, name)(data);
+  const result = await httpsCallable<Req, Res>(firebase().functions, name)(withoutUndefined(data));
   return result.data;
 }
 

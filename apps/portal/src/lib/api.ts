@@ -3,6 +3,7 @@
 import type {
   BindDeviceRequest,
   CreateAgentPairRequest,
+  GetDeviceEnrollmentRequest,
   CreateBranchRequest,
   CreateStaffUserRequest,
   RevokeDeviceRequest,
@@ -18,9 +19,18 @@ import { mockStore } from './mock-store';
  * so each one switches over by replacing the function body only.
  */
 
+/**
+ * The callable SDK sends `undefined` fields as `null`, which optional (non-nullable) Zod fields on
+ * the server reject. Drop them so "not provided" stays absent.
+ */
+export function withoutUndefined<T>(data: T): T {
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) return data;
+  return Object.fromEntries(Object.entries(data as Record<string, unknown>).filter(([, v]) => v !== undefined)) as T;
+}
+
 async function call<Req, Res>(name: string, data: Req): Promise<Res> {
   const fn = httpsCallable<Req, Res>(firebase().functions, name);
-  const result = await fn(data);
+  const result = await fn(withoutUndefined(data));
   return result.data;
 }
 
@@ -67,6 +77,8 @@ export interface DeviceSummary {
   label: string | null;
   status: 'ACTIVE' | 'REVOKED';
   boundAt: string;
+  /** Key fingerprint returned by bindDevice (API.md §3a), e.g. ABCD-EF01-2345-6789. */
+  keyFingerprint?: string | null;
   revokeReason?: string | null;
   sample?: boolean;
 }
@@ -128,8 +140,16 @@ export async function createAgentPair(input: CreateAgentPairRequest) {
   return result;
 }
 
+/** The phone's enrolled key (API.md §3a). Show it so the supervisor can compare with the phone screen. */
+export async function getDeviceEnrollment(input: GetDeviceEnrollmentRequest) {
+  return call<GetDeviceEnrollmentRequest, { deviceId: string; agentUid: string; keyFingerprint: string }>(
+    'getDeviceEnrollment',
+    input,
+  );
+}
+
 export async function bindDevice(input: BindDeviceRequest, branchId: string) {
-  await call<BindDeviceRequest, null>('bindDevice', input);
+  const { keyFingerprint } = await call<BindDeviceRequest, { keyFingerprint: string }>('bindDevice', input);
   // TODO(api): remove once listDevices exists. Mirrors the server: one active device per agent.
   mockStore.bindDevice({
     id: input.deviceId,
@@ -139,7 +159,9 @@ export async function bindDevice(input: BindDeviceRequest, branchId: string) {
     label: input.label?.trim() || null,
     status: 'ACTIVE',
     boundAt: new Date().toISOString(),
+    keyFingerprint,
   });
+  return { keyFingerprint };
 }
 
 export async function revokeDevice(input: RevokeDeviceRequest) {

@@ -23,7 +23,7 @@ const REASON_COPY: Record<RejectReason, string> = {
   IDEMPOTENCY_CONFLICT: 'This request was already used for something else. Start again.',
   SELF_APPROVAL_FORBIDDEN: 'You started this request, so a different person must approve it.',
   NOT_PERMITTED: 'Your role is not allowed to do this here.',
-  STAFF_NOT_ACTIVE: 'Your staff account is not active. Contact your administrator.',
+  STAFF_NOT_ACTIVE: 'Your access has changed. Sign out and sign in again; if it still fails, contact your administrator.',
   ALREADY_REVERSED: 'This has already been reversed.',
   NOT_FOUND: 'We could not find what you were looking for.',
   CONFLICT: 'This already exists or clashes with an existing record.',

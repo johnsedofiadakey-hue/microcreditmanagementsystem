@@ -44,10 +44,10 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 | # | Area | Status | Notes |
 |---|---|---|---|
 | 1 | Portal shell: sign-in (+MFA challenge), role-aware nav, branch switcher, audit log viewer | ✅ | Verified against the emulators. MFA enrolment screen not built (audit U5). Audit log uses mocked data |
-| 2 | Admin: branches, staff, agent pairs, devices | ✅ | Real callables, verified in Postgres. Lists mocked until the list endpoints exist |
-| 3 | Members: register, approve (maker-checker), profile, Susu account + statement, products, approvals queue | ✅ | Verified 19 Oct: admin registers → admin is blocked from approving → branch manager approves → opens account (all real callables, rows in Postgres). Reads (`searchMembers`, `getMember`, `getAccountStatement`, `listPendingApprovals`, `listSusuProducts`) are mocked behind `// TODO(api)` in `apps/portal/src/lib/members-api.ts`. KYC photo upload is wired but untested (the admin role can't upload, per storage.rules) |
+| 2 | Admin: branches, staff, agent pairs, devices | ✅ | Real callables, verified in Postgres. Lists mocked until the list endpoints exist. 19 Oct: Bind phone now looks up `getDeviceEnrollment`, shows the key fingerprint and requires the supervisor to confirm it matches the phone; verified with a scripted P-256 key, and a command signed with it was POSTED |
+| 3 | Members: register, approve (maker-checker), profile, Susu account + statement, products, approvals queue | ✅ | Verified 19 Oct: admin registers → admin is blocked from approving → branch manager approves → opens account (all real callables, rows in Postgres). Reads (`searchMembers`, `getMember`, `getAccountStatement`, `listPendingApprovals`, `listSusuProducts`) are mocked behind `// TODO(api)` in `apps/portal/src/lib/members-api.ts`. KYC photo upload is wired but untested |
 | 4 | Agent app: sign-in, route, collection + offline queue, records, phone/device ID, sign-out block | ✅ | Builds (AGP 9.4.1, compileSdk 37); offline → sync verified on an emulator 19 Oct (audit U1) |
-| 4b | Agent app hardening: biometric unlock, cache wipe on sign-out, persisted refused writes, fonts | 🟡 | Session `harden-the-susu-agent-an` (local_78383c71) |
+| 4b | Agent app hardening: biometric unlock, cache wipe on sign-out, persisted refused writes, fonts, **Keystore enrolment + command signing (REQUESTS #25)** | 🟡 | Session `harden-the-susu-agent-an` (local_78383c71). Until signing ships, the app's collections are refused by the rules |
 | 5 | Cashier: expected vs received cash, handover, payout queue | ⏳ | Waits on backend Step 6 (can be mocked) |
 | 6 | Branch manager: activity board, work queue, close checklist | ⏳ | Waits on backend Steps 6–7 |
 | 7 | Head office: today at a glance, branch comparison, approvals and exceptions | ⏳ | Overview tiles read the planned dashboard docs already |
@@ -57,7 +57,7 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 
 1. **UI:** agent app hardening (4b), running in its own session.
 2. **Backend:** Step 3 read endpoints (REQUESTS #15, #21–#24), the `devices/{id}` and sync-health read models (#16, with L1), then Step 5 SMS dispatcher.
-   **UI:** pick up the 19 Oct contract changes (REQUESTS #25): six new reason messages (portal typecheck fails until added), agent-app enrolment + signing, fingerprint check before binding.
+   **UI:** REQUESTS #25 portal part done (reason copy, fingerprint before binding, `--webpack` dropped, `src/lib` committed). Agent-app enrolment + signing in progress (4b). Then re-audit commit `939103c`.
 3. **Both:** commit and push your own work to `origin/main` at each milestone. Next: GitHub CI. Note that the repo is public by the user's choice (it includes `outputs/` and the bundled Satoshi fonts, whose licence forbids public redistribution).
 4. **UI:** portal MFA enrolment (audit U5) and self-hosted Satoshi (U6).
 5. **UI:** cashier screens (item 5) against mocked Step 6 shapes.
@@ -82,3 +82,4 @@ cd apps/agent-android && ./gradlew :app:assembleDebug # JDK 17+, Android SDK wit
 - **2026-10-19** UI & Audit: portal Members module done (list/search, register with KYC photo upload, maker-checker approval, profile with masked Ghana Card, open Susu account, statement, approvals queue, Susu products) and verified against the emulators. REQUESTS #21–#24 added.
 - **2026-10-19** UI & Audit: first UI commit on `main` (portal, agent app as of the hardening session's in-progress state, audit, plan). Pushed to `origin/main` (public repo, by the user's choice).
 - **2026-10-19** Backend: audit fixes — migration `002_hardening` (H1, L3, M3, M4, M5), signed agent commands + device enrolment (H2), live staff checks (M1), createStaffUser order (M2), KYC path checks (M6), agent/pair checks (M7), failed-command exceptions + sweeper (M8), per-device lock (L2), local `migrate`/`seed:local` (L5, #19), `docs/ops/ENVIRONMENT_CHECKLIST.md` (L6). 65 unit + 2 Postgres + 18 rules tests green. Contract changes listed in REQUESTS #25.
+- **2026-10-19** UI & Audit: pushed the missing `apps/portal/src/lib` (`877ae85`). REQUESTS #25 portal part: new reason copy, fingerprint check before `bindDevice`, Turbopack again (shared is extensionless), callables no longer send `undefined` as `null` (optional `label` was rejected), SUPER_ADMIN may upload KYC photos, old seed script retired in favour of `seed:local`. Agent-app signing handed to 4b with a verified signing reference.
