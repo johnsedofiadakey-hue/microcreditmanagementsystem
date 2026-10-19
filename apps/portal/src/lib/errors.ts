@@ -27,6 +27,9 @@ const REASON_COPY: Record<RejectReason, string> = {
   ALREADY_REVERSED: 'This has already been reversed.',
   NOT_FOUND: 'We could not find what you were looking for.',
   CONFLICT: 'This already exists or clashes with an existing record.',
+  BRANCH_DAY_CLOSED: 'This branch day is already closed. Record it on the next day.',
+  APPROVAL_LIMIT_EXCEEDED: 'This amount needs approval from head office (finance or an administrator).',
+  EXPECTED_CASH_CHANGED: 'More collections reached the server while you were counting. Check the new expected amount and count again.',
 };
 
 const CODE_COPY: Record<string, string> = {

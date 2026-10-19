@@ -6,6 +6,11 @@ import type { Database } from '../src/db/types.js';
 import { findLedgerAccountId, getBalance } from '../src/ledger/accounts.js';
 import { findBalanceMismatches } from '../src/ledger/reconcile.js';
 import { dispatchSmsOutbox } from '../src/messaging/dispatch.js';
+import { closeBranchDay, submitBranchCount } from '../src/cash/close.js';
+import { today } from '../src/cash/common.js';
+import { recordHandover } from '../src/cash/handovers.js';
+import { approveWithdrawal, payWithdrawal, requestWithdrawal } from '../src/cash/withdrawals.js';
+import { actor } from './helpers.js';
 import type { SmsMessage, SmsProvider } from '../src/messaging/providers.js';
 import { createAgentPair } from '../src/org/agentPairs.js';
 import { recordStaffUser } from '../src/org/staff.js';
@@ -81,5 +86,41 @@ describe.skipIf(!url)('real Postgres under concurrency', () => {
     expect(new Set(references).size).toBe(references.length);
     expect(references.length).toBe(pending.rows[0]!.n);
     expect((await db.query(`select 1 from outbox where status <> 'SENT'`)).rowCount).toBe(0);
+  });
+
+  it('cash day races: one payout per withdrawal, and a payout never slips past a close', async () => {
+    const custodyId = await findLedgerAccountId(db, 'AGENT_CASH_CUSTODY', seed.agentPairId);
+    const expected = await getBalance(db, custodyId!);
+    await db.transaction((tx) => recordHandover(tx, seed.cashier, { agentPairId: seed.agentPairId, expectedPesewas: expected, countedPesewas: expected }));
+    const cashier2 = actor('cashier-2', 'CASHIER', [seed.branchId]);
+    const manager2 = actor('manager-2', 'BRANCH_MANAGER', [seed.branchId]);
+
+    const first = await db.transaction((tx) => requestWithdrawal(tx, seed.cashier, { susuAccountId: seed.susuAccountId, amountPesewas: 1_000, reason: 'race' }));
+    await db.transaction((tx) => approveWithdrawal(tx, seed.manager, { withdrawalId: first.withdrawalId }));
+    const payouts = await Promise.allSettled([
+      db.transaction((tx) => payWithdrawal(tx, cashier2, { withdrawalId: first.withdrawalId })),
+      db.transaction((tx) => payWithdrawal(tx, manager2, { withdrawalId: first.withdrawalId })),
+    ]);
+    expect(payouts.filter((p) => p.status === 'fulfilled')).toHaveLength(1);
+    expect((await db.query(`select 1 from journal_batches where kind = 'WITHDRAWAL_PAYOUT'`)).rowCount).toBe(1);
+
+    const second = await db.transaction((tx) => requestWithdrawal(tx, seed.cashier, { susuAccountId: seed.susuAccountId, amountPesewas: 2_000, reason: 'race' }));
+    await db.transaction((tx) => approveWithdrawal(tx, seed.manager, { withdrawalId: second.withdrawalId }));
+    const branchCashId = await findLedgerAccountId(db, 'BRANCH_CASH', seed.branchId);
+    const vault = await getBalance(db, branchCashId!);
+    await db.transaction((tx) => submitBranchCount(tx, seed.cashier, { branchId: seed.branchId, day: today(), countedPesewas: vault }));
+    const raced = await Promise.allSettled([
+      db.transaction((tx) => closeBranchDay(tx, manager2, { branchId: seed.branchId, day: today() })),
+      db.transaction((tx) => payWithdrawal(tx, cashier2, { withdrawalId: second.withdrawalId })),
+    ]);
+    const [closeResult, payResult] = raced;
+    // Whichever ran first wins; the other is refused for the right reason, never both.
+    if (closeResult.status === 'fulfilled') {
+      expect(payResult).toMatchObject({ status: 'rejected', reason: { reason: 'BRANCH_DAY_CLOSED' } });
+    } else {
+      expect(payResult.status).toBe('fulfilled');
+      expect(closeResult).toMatchObject({ reason: { reason: 'EXPECTED_CASH_CHANGED' } });
+    }
+    expect(await findBalanceMismatches(db)).toEqual([]);
   });
 });

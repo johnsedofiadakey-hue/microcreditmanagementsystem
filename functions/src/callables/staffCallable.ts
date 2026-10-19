@@ -1,6 +1,7 @@
 import { authClaimsSchema } from '@susu/shared';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
+import type { SecretParam } from 'firebase-functions/params';
 import type { z } from 'zod';
 import type { Database } from '../db/types.js';
 import type { Actor } from '../lib/actor.js';
@@ -24,6 +25,9 @@ const STATUS_BY_REASON: Record<string, ConstructorParameters<typeof HttpsError>[
   MEMBER_NOT_ACTIVE: 'failed-precondition',
   ACCOUNT_NOT_ACTIVE: 'failed-precondition',
   ALREADY_REVERSED: 'failed-precondition',
+  BRANCH_DAY_CLOSED: 'failed-precondition',
+  APPROVAL_LIMIT_EXCEEDED: 'permission-denied',
+  EXPECTED_CASH_CHANGED: 'aborted',
 };
 
 /**
@@ -33,8 +37,9 @@ const STATUS_BY_REASON: Record<string, ConstructorParameters<typeof HttpsError>[
 export function staffCallable<S extends z.ZodType, R>(
   schema: S,
   handler: (ctx: { db: Database; actor: Actor; input: z.output<S>; request: CallableRequest }) => Promise<R>,
+  options: { secrets?: SecretParam[] } = {},
 ) {
-  return onCall({ region: REGION, enforceAppCheck: true, secrets: [DATABASE_URL] }, async (request) => {
+  return onCall({ region: REGION, enforceAppCheck: true, secrets: [DATABASE_URL, ...(options.secrets ?? [])] }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in first');
     const claims = authClaimsSchema.safeParse(request.auth.token);
     if (!claims.success) throw new HttpsError('permission-denied', 'Your account has no role assigned');

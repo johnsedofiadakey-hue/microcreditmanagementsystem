@@ -8,18 +8,20 @@ import { z } from 'zod';
 
 export const SMS_SEGMENT_GSM7 = 160;
 
-/** The outbox payload written by the posting transaction (functions/src/commands/collection.ts). */
+const receiptValues = z.object({
+  /** formatCedis output, e.g. "GH₵ 1,234.50". */
+  amount: z.string(),
+  balance: z.string(),
+  reference: z.string(),
+  /** ISO server time of the posting. */
+  postedAt: z.string(),
+});
+
+/** The outbox payloads written by posting transactions (collection.ts, cash/withdrawals.ts). */
 export const smsOutboxPayloadSchema = z.object({
   to: z.string().regex(/^\+233\d{9}$/),
-  template: z.literal('COLLECTION_RECEIPT'),
-  values: z.object({
-    /** formatCedis output, e.g. "GH₵ 1,234.50". */
-    amount: z.string(),
-    balance: z.string(),
-    reference: z.string(),
-    /** ISO server time of the posting. */
-    postedAt: z.string(),
-  }),
+  template: z.enum(['COLLECTION_RECEIPT', 'WITHDRAWAL_RECEIPT']),
+  values: receiptValues,
 });
 export type SmsOutboxPayload = z.infer<typeof smsOutboxPayloadSchema>;
 
@@ -64,13 +66,15 @@ function gsm7Only(text: string): string {
 
 /**
  * The text a member receives. `brand` is the sender's trading name (SMS_BRAND), e.g. "Susu".
- * Example: "Susu: GHS 20.00 received 19 Oct 10:24. Balance GHS 120.00. Ref 357D5757. Keep this SMS as your receipt."
+ * Collection: "Susu: GHS 20.00 received 19 Oct 10:24. Balance GHS 120.00. Ref 357D5757. Keep this SMS as your receipt."
+ * Withdrawal: "Susu: GHS 50.00 paid to you 19 Oct 14:02. Balance GHS 70.00. Ref 9A0B1C2D. Keep this SMS as your receipt."
  */
 export function renderSms(payload: SmsOutboxPayload, brand: string): string {
   const v = payload.values;
   const name = gsm7Only(brand).trim() || 'Susu';
+  const what = payload.template === 'WITHDRAWAL_RECEIPT' ? 'paid to you' : 'received';
   const text =
-    `${name}: ${asciiCedis(v.amount)} received ${shortTime(v.postedAt)}. ` +
+    `${name}: ${asciiCedis(v.amount)} ${what} ${shortTime(v.postedAt)}. ` +
     `Balance ${asciiCedis(v.balance)}. Ref ${v.reference}. Keep this SMS as your receipt.`;
   return gsm7Only(text).replace(/\s+/g, ' ').replace(' .', '.');
 }

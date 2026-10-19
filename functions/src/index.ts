@@ -29,6 +29,20 @@ export {
   listSusuProductsFn as listSusuProducts,
   searchMembersFn as searchMembers,
 } from './callables/reads.js';
+export {
+  approveWithdrawalFn as approveWithdrawal,
+  closeBranchDayFn as closeBranchDay,
+  getBranchCloseFn as getBranchClose,
+  listCasesFn as listCases,
+  listHandoversFn as listHandovers,
+  listWithdrawalsFn as listWithdrawals,
+  payWithdrawalFn as payWithdrawal,
+  recordHandoverFn as recordHandover,
+  rejectWithdrawalFn as rejectWithdrawal,
+  requestWithdrawalFn as requestWithdrawal,
+  resolveCaseFn as resolveCase,
+  submitBranchCountFn as submitBranchCount,
+} from './callables/cash.js';
 export { assignCollectorFn as assignCollector, unassignCollectorFn as unassignCollector } from './callables/routes.js';
 export { onAgentCommandCreated, retryFailedCommands } from './triggers/agentCommands.js';
 export { reconcileBalances } from './triggers/reconcile.js';

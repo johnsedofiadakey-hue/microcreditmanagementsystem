@@ -24,6 +24,9 @@ export const REJECT_REASONS = [
   'ALREADY_REVERSED',
   'NOT_FOUND',
   'CONFLICT',
+  'BRANCH_DAY_CLOSED',
+  'APPROVAL_LIMIT_EXCEEDED',
+  'EXPECTED_CASH_CHANGED',
 ] as const;
 
 export type RejectReason = (typeof REJECT_REASONS)[number];
