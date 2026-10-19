@@ -88,6 +88,8 @@ private fun SignedIn(vm: AgentViewModel, state: AuthState.Ready) {
     val online by vm.online.collectAsStateWithLifecycle()
     val draft by vm.draft.collectAsStateWithLifecycle()
     val deviceId by vm.deviceId.collectAsStateWithLifecycle()
+    val fingerprint by vm.fingerprint.collectAsStateWithLifecycle()
+    val enrollment by vm.enrollment.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.ROUTE) }
     val snackbar = remember { SnackbarHostState() }
@@ -145,7 +147,7 @@ private fun SignedIn(vm: AgentViewModel, state: AuthState.Ready) {
                 when (tab) {
                     Tab.ROUTE -> RouteScreen(route, queue, onCollect = vm::startCollection)
                     Tab.RECORDS -> QueueScreen(queue, vm::memberName)
-                    Tab.PHONE -> PhoneScreen(state.session, deviceId, unsynced, onSignOut = { vm.signOut() })
+                    Tab.PHONE -> PhoneScreen(state.session, deviceId, fingerprint, enrollment, unsynced, onSignOut = { vm.signOut() })
                 }
             }
         }

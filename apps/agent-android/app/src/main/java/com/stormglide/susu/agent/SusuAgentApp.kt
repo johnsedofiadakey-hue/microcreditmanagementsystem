@@ -15,8 +15,11 @@ import com.stormglide.susu.agent.data.AuthRepository
 import com.stormglide.susu.agent.data.CommandQueue
 import com.stormglide.susu.agent.data.DataStoreRefusedWriteStore
 import com.stormglide.susu.agent.data.DeviceStore
+import com.stormglide.susu.agent.data.EnrollmentRepository
 import com.stormglide.susu.agent.data.RouteRepository
 import com.stormglide.susu.agent.security.AppLock
+import com.stormglide.susu.agent.security.DeviceIdentity
+import com.stormglide.susu.agent.security.KeystoreDeviceKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +36,11 @@ class SusuAgentApp : Application() {
     lateinit var routes: RouteRepository
         private set
     lateinit var device: DeviceStore
+        private set
+    /** deviceId + the Keystore key that signs every command (API.md §3, §3a). */
+    lateinit var identity: DeviceIdentity
+        private set
+    lateinit var enrollment: EnrollmentRepository
         private set
 
     /** Biometric / screen-lock gate in front of every signed-in screen. Locked on each cold start. */
@@ -77,6 +85,8 @@ class SusuAgentApp : Application() {
         commands = CommandQueue(firestore, DataStoreRefusedWriteStore(this), appScope)
         routes = RouteRepository(firestore)
         device = DeviceStore(this)
+        identity = DeviceIdentity(device, KeystoreDeviceKey())
+        enrollment = EnrollmentRepository(firestore, device, identity)
     }
 
     /**

@@ -53,7 +53,7 @@ export async function bindDevice(
   actor: Actor,
   input: BindDeviceRequest,
   enrollment: EnrollmentRecord | null,
-): Promise<{ keyFingerprint: string }> {
+): Promise<{ keyFingerprint: string; replacedDeviceIds: string[] }> {
   requireRole(actor, DEVICE_ADMINS);
 
   const pair = await tx.query<{ branch_id: string; status: string }>(
@@ -116,7 +116,7 @@ export async function bindDevice(
       replaced: previous.rows.map((r) => r.id),
     },
   });
-  return { keyFingerprint };
+  return { keyFingerprint, replacedDeviceIds: previous.rows.map((r) => r.id) };
 }
 
 export async function revokeDevice(tx: Queryable, actor: Actor, input: RevokeDeviceRequest): Promise<void> {

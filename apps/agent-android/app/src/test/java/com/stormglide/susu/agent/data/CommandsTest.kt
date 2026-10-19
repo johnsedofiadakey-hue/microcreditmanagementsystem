@@ -16,7 +16,9 @@ class CommandsTest {
     }
 
     @Test fun collectionHasExactlyTheContractFields() {
+        var signed = ""
         val command = Commands.collection(
+            commandId = "0f8fad5b-d9cb-469f-a165-70867728950e",
             agentUid = "agent-a",
             deviceId = "device-a",
             seq = 42,
@@ -25,9 +27,12 @@ class CommandsTest {
             memberId = "2b7c9a10-1f2e-4d3c-8b4a-5e6f7a8b9c01",
             susuAccountId = "7d1e2f30-4a5b-4c6d-9e7f-8a9b0c1d2e01",
             amountPesewas = 2000,
+            sign = { message -> signed = message; "c2lnbmF0dXJlLWZvci10ZXN0" },
         )
         // firestore.rules: keys().hasOnly([...]) && hasAll([...])
-        assertEquals(setOf("type", "agentUid", "deviceId", "seq", "capturedAt", "appVersion", "payload"), command.keys)
+        assertEquals(setOf("type", "agentUid", "deviceId", "seq", "capturedAt", "appVersion", "payload", "sig"), command.keys)
+        assertEquals("c2lnbmF0dXJlLWZvci10ZXN0", command["sig"])
+        assertTrue(signed.startsWith("susu-cmd-v1|0f8fad5b-d9cb-469f-a165-70867728950e|COLLECTION|agent-a|device-a|42|"))
         assertEquals("COLLECTION", command["type"])
         assertEquals("2026-10-18T09:15:00Z", command["capturedAt"])
         assertTrue((command["capturedAt"] as String).length <= 40)
@@ -46,6 +51,10 @@ class CommandsTest {
 
     @Test fun deviceProblemsTellTheAgentToStop() {
         assertTrue(RejectionGuidance.isDeviceProblem("DEVICE_REVOKED"))
+        assertTrue(RejectionGuidance.isDeviceProblem("DEVICE_NOT_ENROLLED"))
+        assertTrue(RejectionGuidance.isDeviceProblem("AGENT_NOT_IN_PAIR"))
         assertFalse(RejectionGuidance.isDeviceProblem("MEMBER_NOT_ACTIVE"))
+        assertTrue(RejectionGuidance.forReason("AGENT_PAIR_NOT_ACTIVE").contains("Sign out"))
+        assertTrue(RejectionGuidance.forReason("INVALID_SIGNATURE").contains("Report"))
     }
 }

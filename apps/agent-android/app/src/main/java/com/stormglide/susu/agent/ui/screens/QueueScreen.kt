@@ -91,10 +91,10 @@ fun QueueScreen(queue: List<QueuedCommand>, memberName: (String) -> String) {
                     if (item.state == SyncState.REJECTED || item.state == SyncState.FAILED) {
                         item.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         Text(
-                            if (item.state == SyncState.FAILED) "Could not be processed. Your supervisor has been notified."
+                            if (item.state == SyncState.FAILED) RejectionGuidance.FAILED_GUIDANCE
                             else RejectionGuidance.forReason(item.reason),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
+                            color = if (item.state == SyncState.FAILED) SusuColors.Warning else MaterialTheme.colorScheme.error,
                         )
                     }
                 }

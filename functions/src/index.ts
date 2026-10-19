@@ -17,5 +17,17 @@ export {
   registerMemberFn as registerMember,
   revokeDeviceFn as revokeDevice,
 } from './callables/index.js';
+export {
+  getAccountStatementFn as getAccountStatement,
+  getMemberFn as getMember,
+  listAgentPairsFn as listAgentPairs,
+  listAuditEventsFn as listAuditEvents,
+  listBranchesFn as listBranches,
+  listDevicesFn as listDevices,
+  listPendingApprovalsFn as listPendingApprovals,
+  listStaffFn as listStaff,
+  listSusuProductsFn as listSusuProducts,
+  searchMembersFn as searchMembers,
+} from './callables/reads.js';
 export { onAgentCommandCreated, retryFailedCommands } from './triggers/agentCommands.js';
 export { reconcileBalances } from './triggers/reconcile.js';

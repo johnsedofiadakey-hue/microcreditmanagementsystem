@@ -61,6 +61,18 @@ kotlin {
     }
 }
 
+// Satoshi is licensed for embedding, not redistribution, so it isn't committed. Fail early with the fix.
+val checkSatoshi by tasks.registering {
+    val fonts = listOf("satoshi_medium", "satoshi_bold", "satoshi_black").map { layout.projectDirectory.file("src/main/res/font/$it.ttf").asFile }
+    doLast {
+        val missing = fonts.filterNot { it.exists() }
+        if (missing.isNotEmpty()) {
+            throw GradleException("Satoshi font files are missing (${missing.joinToString { it.name }}). Run apps/agent-android/scripts/fetch-satoshi.sh once.")
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(checkSatoshi) }
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

@@ -2,6 +2,7 @@ package com.stormglide.susu.agent.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,10 +27,18 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.stormglide.susu.agent.BuildConfig
 import com.stormglide.susu.agent.data.AgentSession
+import com.stormglide.susu.agent.data.EnrollmentState
 import com.stormglide.susu.agent.ui.theme.SusuColors
 
 @Composable
-fun PhoneScreen(session: AgentSession, deviceId: String, unsynced: Int, onSignOut: () -> Unit) {
+fun PhoneScreen(
+    session: AgentSession,
+    deviceId: String,
+    fingerprint: String,
+    enrollment: EnrollmentState,
+    unsynced: Int,
+    onSignOut: () -> Unit,
+) {
     @Suppress("DEPRECATION")
     val clipboard = LocalClipboardManager.current
     Column(
@@ -44,10 +53,23 @@ fun PhoneScreen(session: AgentSession, deviceId: String, unsynced: Int, onSignOu
                 SelectionContainer {
                     Text(deviceId, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)
                 }
+                Spacer(Modifier.height(6.dp))
+                Text("Key fingerprint", style = MaterialTheme.typography.labelLarge, color = SusuColors.Muted)
                 Text(
-                    "Your supervisor binds this ID to you in the portal (Devices → Bind phone). " +
-                        "Until then, collections you record will be rejected.",
+                    fingerprint.ifEmpty { "Setting up…" },
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = SusuColors.Primary,
+                )
+                Text(
+                    when (enrollment) {
+                        EnrollmentState.Enrolled -> "Registered. "
+                        EnrollmentState.Pending -> "Registering this phone… "
+                        is EnrollmentState.Failed -> enrollment.message + " "
+                    } + "Your supervisor binds this phone to you in the portal (Devices → Bind phone) and must " +
+                        "check that the fingerprint there matches this one. Until then, collections you record will be rejected.",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = if (enrollment is EnrollmentState.Failed) SusuColors.Danger else MaterialTheme.colorScheme.onSurface,
                 )
                 OutlinedButton(onClick = { clipboard.setText(AnnotatedString(deviceId)) }, modifier = Modifier.height(48.dp)) {
                     Icon(Icons.Outlined.ContentCopy, contentDescription = null)

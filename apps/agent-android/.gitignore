@@ -8,3 +8,6 @@ captures/
 app/google-services.json
 *.keystore
 *.jks
+
+# Satoshi may not be redistributed (licenses/Satoshi-ITF-FFL.txt). Fetch it with scripts/fetch-satoshi.sh.
+app/src/main/res/font/satoshi_*.ttf

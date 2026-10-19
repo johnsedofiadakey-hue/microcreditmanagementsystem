@@ -29,7 +29,7 @@ type AuthClaims = {
 
 ## 2. Portal callable functions
 
-Call with `httpsCallable(functions, '<name>')`. App Check is enforced. Errors are `FunctionsError` with:
+Call with `httpsCallable(functions, '<name>')`. App Check is enforced. Paged lists take `limit` (default 50, max 200) and return `nextCursor` (`null` on the last page) — pass it back unchanged as `cursor`. Types for every response are exported from `@susu/shared` (`reads.ts`), as are `maskPhone()` and `maskGhanaCard()`. Errors are `FunctionsError` with:
 - `code`: `unauthenticated` · `permission-denied` · `invalid-argument` · `not-found` · `already-exists` · `failed-precondition` · `internal`
 - `details.reason`: a stable code from `REJECT_REASONS` (`@susu/shared/errors.ts`) — map these to friendly copy.
 - `details.issues` (on `invalid-argument`): `[{ path, message }]` for inline field errors.
@@ -46,13 +46,16 @@ Call with `httpsCallable(functions, '<name>')`. App Check is enforced. Errors ar
 | `approveMember` | `approveMemberRequestSchema` `{ memberId }` | `null` | SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER — **not** the person who registered them | **built** |
 | `createSusuProduct` | `createSusuProductRequestSchema` `{ code, name, frequency }` | `{ productId, version }` | SUPER_ADMIN | **built** |
 | `openSusuAccount` | `openSusuAccountRequestSchema` `{ memberId, productId }` | `{ susuAccountId }` | SUPER_ADMIN, BRANCH_MANAGER, CASHIER | **built** |
-| `listBranches` | `{}` | `{ branches: [{ id, code, name, status }] }` | any staff (scoped) | planned — Step 3 |
-| `listStaff` | `{ branchId? }` | `{ staff: [{ uid, email, displayName, role, branchIds, status }] }` | SUPER_ADMIN, BRANCH_MANAGER | planned — Step 3 |
-| `searchMembers` | `{ branchId, query, status?, cursor? }` | `{ members: [{ id, fullName, phoneMasked, ghanaCardMasked, status, kycStatus }], nextCursor }` | staff (scoped) | planned — Step 3 |
-| `getMember` | `{ memberId }` | member profile + `accounts: [{ id, productName, balancePesewas, status }]` | staff (scoped) | planned — Step 3 |
-| `getAccountStatement` | `{ susuAccountId, from?, to?, cursor? }` | `{ lines: [{ postedAt, kind, description, debitPesewas, creditPesewas, balanceAfterPesewas, batchId }], nextCursor }` | staff (scoped) | planned — Step 3 |
-| `listPendingApprovals` | `{ branchId? }` | `{ items: [{ kind, id, summary, requestedBy, requestedAt }] }` | checkers | planned — Step 3 |
-| `listAuditEvents` | `{ entityKind?, entityId?, branchId?, cursor? }` | `{ events: [{ at, actorUid, action, entityKind, entityId, channel, data }], nextCursor }` | SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER (own branch) | planned — Step 3 |
+| `listBranches` | `listBranchesRequestSchema` `{}` | `{ branches: BranchSummary[] }` — `{ id, code, name, status }`, sorted by name | any staff except AGENT (head office: all; others: own branches) | **built 19 Oct** |
+| `listStaff` | `listStaffRequestSchema` `{ branchId? }` | `{ staff: StaffSummary[] }` — `{ uid, email, displayName, role, branchIds, status }` | SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER, SUPERVISOR (scoped) | **built 19 Oct** |
+| `listAgentPairs` | `listAgentPairsRequestSchema` `{ branchId? }` | `{ agentPairs: AgentPairSummary[] }` — `{ id, branchId, name, agentAUid, agentBUid, status }` | any staff except AGENT (scoped) | **built 19 Oct** |
+| `listDevices` | `listDevicesRequestSchema` `{ branchId? }` | `{ devices: DeviceSummary[] }` — `{ id, agentUid, agentPairId, branchId, label, status, boundAt, keyFingerprint, revokeReason }` | SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER, SUPERVISOR (scoped) | **built 19 Oct** |
+| `listSusuProducts` | `listSusuProductsRequestSchema` `{}` | `{ products: ProductRow[] }` — `{ id, code, version, name, frequency, status }` | any staff except AGENT | **built 19 Oct** |
+| `searchMembers` | `searchMembersRequestSchema` `{ branchId?, query, status?, cursor?, limit? }` | `{ members: MemberRow[], nextCursor }` — `{ id, fullName, phoneMasked, ghanaCardMasked, status, kycStatus, branchId, createdAt }`, newest first. `query` matches a name fragment, a phone (`024…` or `+233…`) or a full Ghana Card number; empty lists everyone. `branchId` optional: head office ⇒ all branches, others ⇒ their own | any staff except AGENT (scoped) | **built 19 Oct** |
+| `getMember` | `getMemberRequestSchema` `{ memberId }` | `MemberProfile` — `{ id, branchId, fullName, phone, ghanaCardNumber \| null, ghanaCardMasked, dateOfBirth, status, kycStatus, createdBy, createdAt, approvedBy, approvedAt, photoCount, photoUrls[], accounts: [{ id, productName, balancePesewas, status }] }`. `ghanaCardNumber` and `photoUrls` (signed, 5 min) only for SUPER_ADMIN, COMPLIANCE, or a BRANCH_MANAGER of that branch; others get `null` / `[]` | any staff except AGENT (scoped) | **built 19 Oct** |
+| `getAccountStatement` | `getAccountStatementRequestSchema` `{ susuAccountId, from?, to?, cursor?, limit? }` | `{ account: { id, memberId, productName, balancePesewas, status }, lines: [{ postedAt, kind, description, debitPesewas, creditPesewas, balanceAfterPesewas, batchId }], nextCursor }` — newest first; `balanceAfterPesewas` is the member's balance right after that line | any staff except AGENT (scoped) | **built 19 Oct** |
+| `listPendingApprovals` | `listPendingApprovalsRequestSchema` `{ branchId? }` | `{ items: [{ kind: 'MEMBER_REGISTRATION', id, summary, requestedBy, requestedAt, branchId }] }` — oldest first; `requestedBy` is the maker (hide "Review" when it's the signed-in user — the server refuses it anyway) | SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER (scoped) | **built 19 Oct** |
+| `listAuditEvents` | `listAuditEventsRequestSchema` `{ entityKind?, entityId?, branchId?, cursor?, limit? }` | `{ events: [{ at, actorUid, action, entityKind, entityId, channel, branchId, data }], nextCursor }` — newest first. Company-level events (`branchId: null`, e.g. staff creation) are visible to head office only | SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER (own branches) | **built 19 Oct** |
 | `confirmHandover` / `closeBranch` / `requestWithdrawal` / `approveRequest` / `payWithdrawal` / `recordBankDeposit` | — | — | — | planned — Steps 6–7 |
 
 ## 3. Agent app — offline command queue — **built (COLLECTION)**
@@ -138,13 +141,15 @@ Planned command types, same envelope: `HANDOVER_START` (Step 6), `WITHDRAWAL_REQ
 | Path | Who reads | Contents | Status |
 |---|---|---|---|
 | `commands/{id}` | the agent who wrote it | §3 | **built** |
-| `deviceEnrollments/{deviceId}` | the agent who wrote it (create once) | §3a | **built — new 19 Oct** |
-| `exceptions/{id}` | head office | `{ kind: 'COMMAND_FAILED' \| 'BALANCE_MISMATCH', status: 'OPEN' \| 'RESOLVED', openedAt, … }` — failed commands (`commandId`, `agentUid`, `deviceId`, `error`) and nightly reconciliation alerts (`count`, `sample`) | **built — new 19 Oct** |
-| `dashboards/company/live/exceptions` | head office | `{ openCommandFailures }` | **built — new 19 Oct** |
+| `deviceEnrollments/{deviceId}` | the agent who wrote it (create once) | §3a | **built — 19 Oct** |
+| `devices/{deviceId}` | that phone's agent (a missing document means "not bound yet"); branch staff; head office | `{ status: 'ACTIVE' \| 'REVOKED', agentUid, agentPairId, branchId, keyFingerprint, revokeReason, updatedAt }` — updated on every bind and revoke. The agent app should stop collecting when it's missing, `REVOKED`, or `agentUid` isn't the signed-in user | **built — 19 Oct** |
+| `branchDashboards/{branchId}/syncHealth/{agentPairId}` | that branch's non-agent staff, head office | `{ branchId, agentPairId, devices: [{ deviceId, agentUid, status, lastSeq, received, posted, rejected, missingSeqCount, lastReceivedAt }], updatedAt }` — updated after every command. `missingSeqCount` > 0 means records the phone numbered never arrived (a crash can leave one; a growing count needs a supervisor) | **built — 19 Oct** |
+| `branchDashboards/{branchId}/days/{yyyy-mm-dd}` | that branch's non-agent staff, head office | `{ collectedPesewas, collectionCount, activePairs, handedOverPesewas, pendingSyncCount, closed }` | planned — Step 7. **Path changed 19 Oct**: it was documented as `dashboards/branches/{branchId}/days/{date}`, which has an odd number of segments and isn't a valid document path |
+| `dashboards/company/days/{yyyy-mm-dd}` | head office | `{ collectedPesewas, branchesClosed, branchesOpen, exceptions }` | planned — Step 7 |
+| `dashboards/company/live/exceptions` | head office | `{ openCommandFailures }` | **built — 19 Oct** |
+| `exceptions/{id}` | head office | `{ kind: 'COMMAND_FAILED' \| 'BALANCE_MISMATCH', status: 'OPEN' \| 'RESOLVED', openedAt, … }` — failed commands (`commandId`, `agentUid`, `deviceId`, `error`) and nightly reconciliation alerts (`count`, `sample`) | **built — 19 Oct** |
 | `agentPairs/{agentPairId}/routes/{yyyy-mm-dd}` | agents in that pair | `{ members: [{ memberId, susuAccountId, fullName, phoneMasked, expectedPesewas }] }` | planned — Step 4 |
 | `agentPairs/{agentPairId}/memberSnapshots/{memberId}` | agents in that pair | `{ fullName, phoneMasked, ghanaCardMasked, photoUrl?, accounts: [{ id, productName, status }] }` | planned — Step 4 |
-| `dashboards/branches/{branchId}/days/{yyyy-mm-dd}` | that branch's non-agent staff, head office | `{ collectedPesewas, collectionCount, activePairs, handedOverPesewas, pendingSyncCount, closed }` | planned — Step 7 |
-| `dashboards/company/days/{yyyy-mm-dd}` | head office | `{ collectedPesewas, branchesClosed, branchesOpen, exceptions }` | planned — Step 7 |
 
 Security rules already allow these reads, so UI can be built against the emulator with seeded docs.
 

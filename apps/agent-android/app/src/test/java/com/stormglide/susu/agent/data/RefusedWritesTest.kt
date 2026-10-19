@@ -11,6 +11,7 @@ class RefusedWritesTest {
     private val commandId = "0f8fad5b-d9cb-469f-a165-70867728950e"
 
     private fun command(seq: Long = 7, amount: Long = 2000, agentUid: String = agent) = Commands.collection(
+        commandId = commandId,
         agentUid = agentUid,
         deviceId = "device-a",
         seq = seq,
@@ -19,6 +20,7 @@ class RefusedWritesTest {
         memberId = "2b7c9a10-1f2e-4d3c-8b4a-5e6f7a8b9c01",
         susuAccountId = "7d1e2f30-4a5b-4c6d-9e7f-8a9b0c1d2e01",
         amountPesewas = amount,
+        sign = { "c2lnbmF0dXJlLWZvci10ZXN0" },
     )
 
     @Test fun buildsFromTheEnvelopeThatWasWritten() {

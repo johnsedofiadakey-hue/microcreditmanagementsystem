@@ -3,6 +3,7 @@ import { logger } from 'firebase-functions';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { processAgentCommand } from '../commands/processAgentCommand.js';
+import { publishSyncHealth } from '../projections/firestore.js';
 import { DATABASE_URL, REGION, getDatabase } from '../runtime.js';
 
 /** Stop the trigger's own retries after this long; the sweeper below takes over. */
@@ -26,6 +27,8 @@ export const onAgentCommandCreated = onDocumentCreated(
       const result = await processAgentCommand(getDatabase(), commandId, snapshot.data());
       await snapshot.ref.update({ ...result, processedAt: FieldValue.serverTimestamp() });
       logger.info('Agent command processed', { commandId, status: result.status });
+      const deviceId = snapshot.data()?.deviceId;
+      if (typeof deviceId === 'string') await publishSyncHealth(getDatabase(), deviceId);
     } catch (error) {
       const age = Date.now() - Date.parse(event.time);
       if (age > MAX_RETRY_AGE_MS) {

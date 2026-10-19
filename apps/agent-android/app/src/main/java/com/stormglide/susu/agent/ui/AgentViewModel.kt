@@ -9,19 +9,23 @@ import com.stormglide.susu.agent.BuildConfig
 import com.stormglide.susu.agent.SusuAgentApp
 import com.stormglide.susu.agent.data.AuthState
 import com.stormglide.susu.agent.data.Commands
+import com.stormglide.susu.agent.data.EnrollmentState
 import com.stormglide.susu.agent.data.QueuedCommand
 import com.stormglide.susu.agent.data.RouteMember
 import com.stormglide.susu.agent.data.SyncState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 
 /** A collection being entered. The command ID is fixed when the draft starts, so saving twice can't duplicate it. */
@@ -55,17 +59,22 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     val unsyncedCount: StateFlow<Int> = queue.map { list -> list.count { it.onPhoneOnly } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    /** Reached the server or still on the phone, but not yet POSTED/REJECTED. */
-    val pendingCount: StateFlow<Int> = queue.map { list -> list.count { it.state == SyncState.PENDING_SYNC } }
+    /** Reached the server or still on the phone, but not yet POSTED/REJECTED (FAILED is retried, so it counts). */
+    val pendingCount: StateFlow<Int> = queue.map { list -> list.count { it.state == SyncState.PENDING_SYNC || it.state == SyncState.FAILED } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    /** Rejected or failed records: cash the agent holds that the ledger did not accept. */
-    val rejectedCount: StateFlow<Int> = queue.map { list ->
-        list.count { it.state == SyncState.REJECTED || it.state == SyncState.FAILED }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    /** Rejected records: cash the agent holds that the ledger did not accept. FAILED ones are retried by the server. */
+    val rejectedCount: StateFlow<Int> = queue.map { list -> list.count { it.state == SyncState.REJECTED } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     private val _deviceId = MutableStateFlow("")
     val deviceId: StateFlow<String> = _deviceId.asStateFlow()
+
+    /** Key fingerprint the supervisor compares in the portal before binding (ABCD-EF01-2345-6789). */
+    private val _fingerprint = MutableStateFlow("")
+    val fingerprint: StateFlow<String> = _fingerprint.asStateFlow()
+
+    val enrollment: StateFlow<EnrollmentState> = app.enrollment.state
 
     private val _signIn = MutableStateFlow(SignInUi())
     val signIn: StateFlow<SignInUi> = _signIn.asStateFlow()
@@ -82,7 +91,25 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     val notice: StateFlow<String?> = _notice.asStateFlow()
 
     init {
-        viewModelScope.launch { _deviceId.value = app.device.deviceId() }
+        viewModelScope.launch { refreshIdentity() }
+        // Enrol this phone's key once per signed-in agent. Runs on the app scope so leaving the screen doesn't stop it.
+        viewModelScope.launch {
+            auth.map { (it as? AuthState.Ready)?.session?.uid }.distinctUntilChanged().collect { uid ->
+                if (uid != null) app.appScope.launch {
+                    app.enrollment.ensureEnrolled(uid)
+                    refreshIdentity()
+                }
+            }
+        }
+    }
+
+    private suspend fun refreshIdentity() {
+        runCatching { withContext(Dispatchers.IO) { app.identity.ready() } }
+            .onSuccess {
+                _deviceId.value = it.deviceId
+                _fingerprint.value = it.fingerprint
+            }
+            .onFailure { _notice.value = "This phone's security key could not be set up. Contact your supervisor." }
     }
 
     fun memberName(memberId: String): String =
@@ -144,17 +171,29 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
         if (draft.saving || !Commands.isValidCollectionAmount(amountPesewas)) return
         _draft.value = draft.copy(saving = true)
         viewModelScope.launch {
-            val seq = app.device.nextSeq()
-            val command = Commands.collection(
-                agentUid = session.uid,
-                deviceId = app.device.deviceId(),
-                seq = seq,
-                capturedAt = Commands.capturedAt(Instant.now()),
-                appVersion = BuildConfig.VERSION_NAME,
-                memberId = draft.member.memberId,
-                susuAccountId = draft.member.susuAccountId,
-                amountPesewas = amountPesewas,
-            )
+            val command = try {
+                withContext(Dispatchers.IO) {
+                    val identity = app.identity.ready()
+                    val seq = app.device.nextSeq()
+                    Commands.collection(
+                        commandId = draft.commandId,
+                        agentUid = session.uid,
+                        deviceId = identity.deviceId,
+                        seq = seq,
+                        capturedAt = Commands.capturedAt(Instant.now()),
+                        appVersion = BuildConfig.VERSION_NAME,
+                        memberId = draft.member.memberId,
+                        susuAccountId = draft.member.susuAccountId,
+                        amountPesewas = amountPesewas,
+                        sign = app.identity::sign,
+                    )
+                }
+            } catch (e: Exception) {
+                // Nothing was written; the draft (and its command ID) stays so the agent can try again.
+                _draft.value = draft.copy(saving = false)
+                _notice.value = "Could not sign this record on the phone. Try again, or contact your supervisor."
+                return@launch
+            }
             app.commands.enqueue(draft.commandId, command)
             _draft.value = null
             onSaved(draft.commandId)

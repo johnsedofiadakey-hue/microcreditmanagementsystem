@@ -18,7 +18,8 @@ let env: RulesTestEnvironment;
 
 beforeAll(async () => {
   env = await initializeTestEnvironment({
-    projectId: 'demo-susu',
+    // Its own project ID, so a test run never replaces the rules or clears the data of a dev emulator.
+    projectId: 'demo-susu-rules-test',
     firestore: { rules: readFileSync(resolve(__dirname, '../../../firestore.rules'), 'utf8') },
   });
 });
@@ -150,11 +151,31 @@ describe('projections are read-only and scoped', () => {
   });
 
   it('branch dashboards are visible to that branch staff and head office only', async () => {
-    await assertSucceeds(getDoc(doc(manager(), 'dashboards', 'branches', BRANCH, 'today')));
-    await assertFails(getDoc(doc(manager(), 'dashboards', 'branches', OTHER_BRANCH, 'today')));
-    await assertSucceeds(getDoc(doc(admin(), 'dashboards', 'branches', OTHER_BRANCH, 'today')));
-    await assertFails(getDoc(doc(agent(), 'dashboards', 'branches', BRANCH, 'today')));
-    await assertFails(setDoc(doc(admin(), 'dashboards', 'branches', BRANCH, 'today'), { x: 1 }));
+    for (const path of [['days', '2026-10-19'], ['syncHealth', PAIR]] as const) {
+      await assertSucceeds(getDoc(doc(manager(), 'branchDashboards', BRANCH, ...path)));
+      await assertFails(getDoc(doc(manager(), 'branchDashboards', OTHER_BRANCH, ...path)));
+      await assertSucceeds(getDoc(doc(admin(), 'branchDashboards', OTHER_BRANCH, ...path)));
+      await assertFails(getDoc(doc(agent(), 'branchDashboards', BRANCH, ...path)));
+      await assertFails(setDoc(doc(admin(), 'branchDashboards', BRANCH, ...path), { x: 1 }));
+    }
+  });
+
+  it('company dashboards are head office only', async () => {
+    await assertSucceeds(getDoc(doc(admin(), 'dashboards', 'company', 'days', '2026-10-19')));
+    await assertSucceeds(getDoc(doc(admin(), 'dashboards', 'company', 'live', 'exceptions')));
+    await assertFails(getDoc(doc(manager(), 'dashboards', 'company', 'days', '2026-10-19')));
+  });
+
+  it('devices/{id}: the agent sees their own phone, or that it is not bound; staff see their branch', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'devices', 'device-a'), { status: 'ACTIVE', agentUid: 'agent-a', agentPairId: PAIR, branchId: BRANCH });
+    });
+    await assertSucceeds(getDoc(doc(agent(), 'devices', 'device-a')));
+    await assertSucceeds(getDoc(doc(agent(), 'devices', 'not-bound-yet')));
+    await assertFails(getDoc(doc(otherAgent(), 'devices', 'device-a')));
+    await assertSucceeds(getDoc(doc(manager(), 'devices', 'device-a')));
+    await assertFails(getDoc(doc(env.authenticatedContext('m2', { role: 'BRANCH_MANAGER', branchIds: [OTHER_BRANCH] }).firestore(), 'devices', 'device-a')));
+    await assertFails(setDoc(doc(agent(), 'devices', 'device-a'), { status: 'ACTIVE', agentUid: 'agent-a' }));
   });
 
   it('everything else is denied by default', async () => {

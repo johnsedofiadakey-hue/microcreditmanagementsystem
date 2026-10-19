@@ -22,6 +22,7 @@ import { createAgentPair } from '../org/agentPairs.js';
 import { createBranch } from '../org/branches.js';
 import { bindDevice, describeEnrollment, revokeDevice, type EnrollmentRecord } from '../org/devices.js';
 import { createStaffUserFlow, type StaffAuth } from '../org/staff.js';
+import { publishDeviceStatus } from '../projections/firestore.js';
 import { staffCallable } from './staffCallable.js';
 
 export const createBranchFn = staffCallable(createBranchRequestSchema, ({ db, actor, input }) =>
@@ -67,12 +68,16 @@ export const getDeviceEnrollmentFn = staffCallable(getDeviceEnrollmentRequestSch
 
 export const bindDeviceFn = staffCallable(bindDeviceRequestSchema, async ({ db, actor, input }) => {
   const enrollment = await readEnrollment(input.deviceId);
-  return db.transaction((tx) => bindDevice(tx, actor, input, enrollment));
+  const result = await db.transaction((tx) => bindDevice(tx, actor, input, enrollment));
+  await publishDeviceStatus(db, [input.deviceId, ...result.replacedDeviceIds]);
+  return { keyFingerprint: result.keyFingerprint };
 });
 
-export const revokeDeviceFn = staffCallable(revokeDeviceRequestSchema, ({ db, actor, input }) =>
-  db.transaction((tx) => revokeDevice(tx, actor, input)),
-);
+export const revokeDeviceFn = staffCallable(revokeDeviceRequestSchema, async ({ db, actor, input }) => {
+  await db.transaction((tx) => revokeDevice(tx, actor, input));
+  await publishDeviceStatus(db, [input.deviceId]);
+  return null;
+});
 
 /**
  * Checks the caller's uploaded photos exist, registers the member, then moves the photos from the

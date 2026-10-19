@@ -87,10 +87,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Live dashboard counters per branch, written by functions.
-    match /dashboards/branches/{branchId}/{document=**} {
+    // Per-branch dashboards, written by functions:
+    //   branchDashboards/{branchId}/days/{yyyy-mm-dd}       daily counters
+    //   branchDashboards/{branchId}/syncHealth/{agentPairId} phone sync health per pair
+    match /branchDashboards/{branchId}/{document=**} {
       allow read: if isHeadOffice() || (signedIn() && role() != 'AGENT' && hasBranch(branchId));
       allow write: if false;
+    }
+
+    // What the agent app checks before collecting: is this phone bound, to me, and still active?
+    // A phone that isn't bound yet has no document; the agent may read that absence.
+    match /devices/{deviceId} {
+      allow get: if (isAgent() && (resource == null || resource.data.agentUid == request.auth.uid))
+        || isHeadOffice()
+        || (signedIn() && role() != 'AGENT' && resource != null && hasBranch(resource.data.branchId));
+      allow list, write: if false;
     }
 
     match /dashboards/company/{document=**} {
