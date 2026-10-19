@@ -27,9 +27,3 @@ export function formatDateTime(iso: string): string {
 export function todayKey(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
-
-/** Mask a Ghana Card number for any screen that is not the authorised member profile. */
-export function maskGhanaCard(value: string): string {
-  const match = /^GHA-\d{9}-(\d)$/.exec(value);
-  return match ? `GHA-•••••••••-${match[1]}` : '•••';
-}

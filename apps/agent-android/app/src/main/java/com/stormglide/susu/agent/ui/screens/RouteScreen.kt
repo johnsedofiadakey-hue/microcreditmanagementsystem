@@ -56,7 +56,7 @@ fun RouteScreen(
         item {
             Text("Today's route", style = MaterialTheme.typography.headlineSmall)
             Text(
-                "${members.size} members · tap a member to record a collection",
+                "${members.size} ${if (members.size == 1) "member" else "members"} · tap a member to record a collection",
                 style = MaterialTheme.typography.bodyMedium,
                 color = SusuColors.Muted,
             )

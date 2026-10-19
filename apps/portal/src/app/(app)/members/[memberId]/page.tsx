@@ -13,15 +13,16 @@ import { Dialog, DialogContent, DialogFooter, DialogTrigger } from '@/components
 import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
 import { NativeSelect } from '@/components/ui/input';
-import { KycChip, RecordStatus, SampleTag } from '@/components/ui/status-chip';
+import { KycChip, RecordStatus } from '@/components/ui/status-chip';
 import { can } from '@/lib/access';
 import { useSession } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
+import { LoadError } from '@/components/load-error';
 import { toActionError } from '@/lib/errors';
 import { approveMember, getMember, listSusuProducts, openSusuAccount, type MemberProfile } from '@/lib/members-api';
 import { useAction } from '@/lib/use-action';
 import { useList } from '@/lib/use-list';
-import { formatDateTime, maskGhanaCard } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -68,7 +69,7 @@ function ApprovalPanel({ member }: { member: MemberProfile }) {
                 setBusy(true);
                 setError(null);
                 try {
-                  await approveMember({ memberId: member.id }, user.uid);
+                  await approveMember({ memberId: member.id });
                   toast.success(`${member.fullName} approved`, { description: 'You can now open a Susu account for them.' });
                 } catch (err) {
                   setError(toActionError(err).message);
@@ -147,12 +148,19 @@ export default function MemberProfilePage() {
   const { claims } = useSession();
   const { branchName } = useBranch();
   const [reveal, setReveal] = useState(false);
-  const { rows, loading } = useList(() => getMember({ memberId }).then((m) => (m ? [m] : [])), [memberId]);
+  const { rows, loading, error } = useList(() => getMember({ memberId }).then((m) => (m ? [m] : [])), [memberId]);
   const member = rows[0];
   const fullCard = can.seeFullGhanaCard(claims.role);
 
   if (loading && !member) {
     return <Loader2 className="mx-auto mt-20 size-6 animate-spin text-primary" aria-label="Loading member" />;
+  }
+  if (!member && error) {
+    return (
+      <div className="py-20">
+        <LoadError error={error} />
+      </div>
+    );
   }
   if (!member) {
     return (
@@ -183,7 +191,7 @@ export default function MemberProfilePage() {
         <div className="grid gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-heading text-2xl font-bold tracking-tight">{member.fullName}</h1>
-            {member.sample && <SampleTag />}
+
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <RecordStatus status={member.status} />
@@ -210,8 +218,8 @@ export default function MemberProfilePage() {
               <Detail label="Mobile">{member.phone}</Detail>
               <Detail label="Ghana Card">
                 <span className="flex items-center gap-2 font-mono">
-                  {fullCard && reveal ? member.ghanaCardNumber : maskGhanaCard(member.ghanaCardNumber)}
-                  {fullCard && (
+                  {fullCard && reveal && member.ghanaCardNumber ? member.ghanaCardNumber : member.ghanaCardMasked}
+                  {fullCard && member.ghanaCardNumber && (
                     <button
                       type="button"
                       onClick={() => setReveal((r) => !r)}
@@ -224,7 +232,21 @@ export default function MemberProfilePage() {
                 </span>
               </Detail>
               <Detail label="Date of birth">{member.dateOfBirth}</Detail>
-              <Detail label="Photos">{member.photoCount ? `${member.photoCount} in the KYC inbox` : 'None captured'}</Detail>
+              <Detail label="Photos">
+                {member.photoUrls.length > 0 ? (
+                  <span className="flex flex-wrap gap-2">
+                    {member.photoUrls.map((url, i) => (
+                      <a key={url} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border border-border">
+                        <img src={url} alt={`KYC photo ${i + 1}`} className="size-20 object-cover" />
+                      </a>
+                    ))}
+                  </span>
+                ) : member.photoCount ? (
+                  `${member.photoCount} captured`
+                ) : (
+                  'None captured'
+                )}
+              </Detail>
               <Detail label="Registered">
                 {formatDateTime(member.createdAt)} · <span className="font-mono text-xs">{member.createdBy}</span>
               </Detail>
@@ -260,7 +282,7 @@ export default function MemberProfilePage() {
                     >
                       <div className="grid flex-1 gap-0.5">
                         <span className="flex items-center gap-2 font-medium group-hover:text-primary group-focus-visible:underline">
-                          {a.productName} {a.sample && <SampleTag />}
+                          {a.productName}
                         </span>
                         <span className="font-mono text-xs text-muted-foreground">{a.id.slice(0, 8)}</span>
                       </div>

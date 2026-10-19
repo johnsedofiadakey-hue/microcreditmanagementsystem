@@ -40,7 +40,7 @@ export function RegisterMemberDialog() {
     setUploading(true);
     try {
       const photoPaths = await Promise.all(photos.map((file) => uploadKycPhoto(file, user.uid)));
-      return await registerMember({ ...(input as RegisterMemberRequest), photoPaths }, user.uid);
+      return await registerMember({ ...(input as RegisterMemberRequest), photoPaths });
     } finally {
       setUploading(false);
     }

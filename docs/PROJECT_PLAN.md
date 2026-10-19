@@ -30,7 +30,7 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 |---|---|---|
 | 1 Foundation | ✅ local | Monorepo, Firebase config, claims, org model, audit log, rules tests. Firebase projects and CI not created yet |
 | 2 Ledger core | ✅ | Posting, idempotency, reversals, append-only. Hardened 19 Oct (migration 002): balances move only via journal triggers, committed batches frozen, reversals must mirror, nightly reconciliation |
-| 3 Members & Susu accounts | 🟡 | Writes built. Read endpoints planned: `searchMembers`, `getMember`, `getAccountStatement`, `listPendingApprovals`, `listAuditEvents`, `listBranches`, `listStaff` |
+| 3 Members & Susu accounts | ✅ | Writes and all read endpoints built (`listBranches`, `listStaff`, `listAgentPairs`, `listDevices`, `listSusuProducts`, `searchMembers`, `getMember`, `getAccountStatement`, `listPendingApprovals`, `listAuditEvents`); portal uses them since 19 Oct |
 | 4 Offline collections | ✅ backend | Command queue → trigger → ledger → SMS outbox. **Commands are signed by the phone's Keystore key since 19 Oct** (agent app must enrol + sign, REQUESTS #25). FAILED commands retried every 15 min. Route/member-snapshot read models still planned |
 | 5 SMS receipts | ⏳ | |
 | 6 Handover, branch close, withdrawals | ⏳ | |
@@ -44,10 +44,10 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 | # | Area | Status | Notes |
 |---|---|---|---|
 | 1 | Portal shell: sign-in (+MFA challenge), role-aware nav, branch switcher, audit log viewer | ✅ | Verified against the emulators. MFA enrolment screen not built (audit U5). Audit log uses mocked data |
-| 2 | Admin: branches, staff, agent pairs, devices | ✅ | Real callables, verified in Postgres. Lists mocked until the list endpoints exist. 19 Oct: Bind phone now looks up `getDeviceEnrollment`, shows the key fingerprint and requires the supervisor to confirm it matches the phone; verified with a scripted P-256 key, and a command signed with it was POSTED |
-| 3 | Members: register, approve (maker-checker), profile, Susu account + statement, products, approvals queue | ✅ | Verified 19 Oct: admin registers → admin is blocked from approving → branch manager approves → opens account (all real callables, rows in Postgres). Reads (`searchMembers`, `getMember`, `getAccountStatement`, `listPendingApprovals`, `listSusuProducts`) are mocked behind `// TODO(api)` in `apps/portal/src/lib/members-api.ts`. KYC photo upload is wired but untested |
+| 2 | Admin: branches, staff, agent pairs, devices | ✅ | Real callables and real lists (mocks removed 19 Oct). 19 Oct: Bind phone now looks up `getDeviceEnrollment`, shows the key fingerprint and requires the supervisor to confirm it matches the phone; verified with a scripted P-256 key, and a command signed with it was POSTED |
+| 3 | Members: register, approve (maker-checker), profile, Susu account + statement, products, approvals queue | ✅ | Verified 19 Oct: admin registers → admin is blocked from approving → branch manager approves → opens account (all real callables, rows in Postgres). Reads now real (mocks removed 19 Oct); profile shows KYC photos via 5-minute signed URLs to allowed roles. KYC photo upload is wired but untested. Lists load the first 200 rows; paging (`nextCursor`) not yet in the UI |
 | 4 | Agent app: sign-in, route, collection + offline queue, records, phone/device ID, sign-out block | ✅ | Builds (AGP 9.4.1, compileSdk 37); offline → sync verified on an emulator 19 Oct (audit U1) |
-| 4b | Agent app hardening: biometric unlock, cache wipe on sign-out, persisted refused writes, fonts, **Keystore enrolment + command signing (REQUESTS #25)** | 🟡 | Session `harden-the-susu-agent-an` (local_78383c71). Until signing ships, the app's collections are refused by the rules |
+| 4b | Agent app hardening: biometric unlock, cache wipe on sign-out, persisted refused writes, fonts, **Keystore enrolment + command signing (REQUESTS #25)** | ✅ | Verified end to end 19 Oct on an API 37 emulator: real Keystore key enrolled → portal showed the same fingerprint → bound → signed GH₵ 20.00 collection POSTED → visible on the portal statement. Fonts: run `apps/agent-android/scripts/fetch-satoshi.sh` once per checkout |
 | 5 | Cashier: expected vs received cash, handover, payout queue | ⏳ | Waits on backend Step 6 (can be mocked) |
 | 6 | Branch manager: activity board, work queue, close checklist | ⏳ | Waits on backend Steps 6–7 |
 | 7 | Head office: today at a glance, branch comparison, approvals and exceptions | ⏳ | Overview tiles read the planned dashboard docs already |
@@ -55,9 +55,8 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 
 ## Next up
 
-1. **UI:** agent app hardening (4b), running in its own session.
-2. **Backend:** Step 3 read endpoints (REQUESTS #15, #21–#24), the `devices/{id}` and sync-health read models (#16, with L1), then Step 5 SMS dispatcher.
-   **UI:** REQUESTS #25 portal part done (reason copy, fingerprint before binding, `--webpack` dropped, `src/lib` committed). Agent-app enrolment + signing in progress (4b). Then re-audit commit `939103c`.
+1. **Backend:** Step 4 route + member-snapshot projections (the agent app shows an empty route until `agentPairs/{id}/routes/{date}` is written; the 19 Oct test wrote it by hand), sync-health read model (#16, with L1), then Step 5 SMS dispatcher.
+2. **UI:** re-audit commit `939103c`; list paging in the portal; then cashier screens (item 5) against mocked Step 6 shapes.
 3. **Both:** commit and push your own work to `origin/main` at each milestone. Next: GitHub CI. Note that the repo is public by the user's choice (it includes `outputs/` and the bundled Satoshi fonts, whose licence forbids public redistribution).
 4. **UI:** portal MFA enrolment (audit U5) and self-hosted Satoshi (U6).
 5. **UI:** cashier screens (item 5) against mocked Step 6 shapes.
@@ -84,3 +83,4 @@ cd apps/agent-android && ./gradlew :app:assembleDebug # JDK 17+, Android SDK wit
 - **2026-10-19** Backend: audit fixes — migration `002_hardening` (H1, L3, M3, M4, M5), signed agent commands + device enrolment (H2), live staff checks (M1), createStaffUser order (M2), KYC path checks (M6), agent/pair checks (M7), failed-command exceptions + sweeper (M8), per-device lock (L2), local `migrate`/`seed:local` (L5, #19), `docs/ops/ENVIRONMENT_CHECKLIST.md` (L6). 65 unit + 2 Postgres + 18 rules tests green. Contract changes listed in REQUESTS #25.
 - **2026-10-19** UI & Audit: pushed the missing `apps/portal/src/lib` (`877ae85`). REQUESTS #25 portal part: new reason copy, fingerprint check before `bindDevice`, Turbopack again (shared is extensionless), callables no longer send `undefined` as `null` (optional `label` was rejected), SUPER_ADMIN may upload KYC photos, old seed script retired in favour of `seed:local`. Agent-app signing handed to 4b with a verified signing reference.
 - **2026-10-19** Committed and pushed all in-progress work (`a1f1578`): backend Step 3 read callables (`listBranches`, `listStaff`, `listAgentPairs`, `listDevices`, `listSusuProducts`, `searchMembers`, `getMember`, `getAccountStatement`, `listPendingApprovals`, `listAuditEvents`) + projections and sync-health reads; agent-app Keystore enrolment and signing (4b) as of that moment. Satoshi `.ttf` files removed from the repo and ignored. Typecheck, 89 unit tests and Android unit tests green. Portal still needs to swap its `// TODO(api)` mocks for these reads.
+- **2026-10-19** Steps 1–2 of the remaining work: portal switched from mocks to the real read endpoints (mock stores deleted; lists reload after any write; load errors shown; KYC photos on the profile). Agent-app signing verified end to end on the emulator (enrol → fingerprint match in portal → bind → signed collection POSTED → on statement). REQUESTS #25 closed.

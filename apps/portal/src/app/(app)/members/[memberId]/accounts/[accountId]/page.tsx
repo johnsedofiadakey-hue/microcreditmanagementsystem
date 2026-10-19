@@ -6,10 +6,10 @@ import { ArrowLeft, ReceiptText } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMemo } from 'react';
-import { MockNotice } from '@/components/mock-notice';
+import { LoadError } from '@/components/load-error';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/ui/data-table';
-import { RecordStatus, SampleTag, StatusChip } from '@/components/ui/status-chip';
+import { RecordStatus, StatusChip } from '@/components/ui/status-chip';
 import { getAccountStatement, type StatementLine } from '@/lib/members-api';
 import { useList } from '@/lib/use-list';
 import { formatDateTime } from '@/lib/utils';
@@ -29,7 +29,10 @@ const money = (v: number) => (v ? formatCedis(v) : '—');
 
 export default function StatementPage() {
   const { memberId, accountId } = useParams<{ memberId: string; accountId: string }>();
-  const { rows, loading } = useList(() => getAccountStatement({ susuAccountId: accountId }).then((r) => [r]), [accountId]);
+  const { rows, loading, error } = useList(
+    () => getAccountStatement({ susuAccountId: accountId }).then((r) => (r ? [r] : [])),
+    [accountId],
+  );
   const statement = rows[0];
   const account = statement?.account;
 
@@ -89,7 +92,7 @@ export default function StatementPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="grid gap-2">
           <h1 className="flex items-center gap-2 font-heading text-2xl font-bold tracking-tight">
-            {account?.productName ?? 'Susu account'} {account?.sample && <SampleTag />}
+            {account?.productName ?? 'Susu account'}
           </h1>
           <div className="flex items-center gap-2">
             {account && <RecordStatus status={account.status} />}
@@ -103,7 +106,7 @@ export default function StatementPage() {
           </CardContent>
         </Card>
       </div>
-      <MockNotice endpoint="getAccountStatement" />
+      <LoadError error={error} />
       <p className="text-sm text-muted-foreground">
         Every line comes from the ledger. Nothing here can be edited; mistakes are corrected with an approved reversal,
         and both lines stay visible.

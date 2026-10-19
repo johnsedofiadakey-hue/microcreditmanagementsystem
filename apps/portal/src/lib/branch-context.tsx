@@ -4,7 +4,7 @@ import { isHeadOffice } from '@susu/shared';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { listBranches, type BranchSummary } from './api';
 import { useSession } from './auth-context';
-import { mockStore } from './mock-store';
+import { onDataChanged } from './data-events';
 
 /** `null` means "All branches" — only offered to head-office roles. */
 export type BranchScope = string | null;
@@ -30,10 +30,9 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   const [scope, setScopeState] = useState<BranchScope>(null);
 
   useEffect(() => {
-    const refresh = () => listBranches().then((r) => setAll(r.branches));
+    const refresh = () => listBranches().then((r) => setAll(r.branches)).catch(() => undefined);
     refresh();
-    // TODO(api): drop the subscription once listBranches is a real call.
-    const unsubscribe = mockStore.subscribe(refresh);
+    const unsubscribe = onDataChanged(refresh);
     return () => {
       unsubscribe();
     };

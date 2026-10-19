@@ -5,7 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Ban, Link2, Loader2, Smartphone } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
-import { MockNotice } from '@/components/mock-notice';
+import { LoadError } from '@/components/load-error';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogTrigger } from '@/components
 import { Field } from '@/components/ui/field';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
-import { RecordStatus, SampleTag } from '@/components/ui/status-chip';
+import { RecordStatus } from '@/components/ui/status-chip';
 import { can } from '@/lib/access';
 import {
   bindDevice,
@@ -44,7 +44,7 @@ function BindDeviceDialog({ pairs, nameOf }: { pairs: AgentPairSummary[]; nameOf
   const eligible = active.filter((p) => p.agentAUid === agentUid || p.agentBUid === agentUid);
   const pair = eligible.find((p) => p.id === agentPairId);
   const lookup = useAction(getDeviceEnrollmentRequestSchema, getDeviceEnrollment);
-  const action = useAction(bindDeviceRequestSchema, (input) => bindDevice(input, pair?.branchId ?? ''));
+  const action = useAction(bindDeviceRequestSchema, (input) => bindDevice(input));
 
   function reset() {
     setDeviceId('');
@@ -218,7 +218,7 @@ function RevokeDialog({ device, agentName }: { device: DeviceSummary; agentName:
 export default function DevicesPage() {
   const { claims } = useSession();
   const { scope, branchName } = useBranch();
-  const { rows, loading } = useList(() => listDevices({ branchId: scope ?? undefined }).then((r) => r.devices), [scope]);
+  const { rows, loading, error } = useList(() => listDevices({ branchId: scope ?? undefined }).then((r) => r.devices), [scope]);
   const { rows: pairs } = useList(() => listAgentPairs({ branchId: scope ?? undefined }).then((r) => r.agentPairs), [scope]);
   const { rows: staff } = useList(() => listStaff({}).then((r) => r.staff), []);
   const manage = can.manageDevices(claims.role);
@@ -240,7 +240,7 @@ export default function DevicesPage() {
         cell: ({ row }) => (
           <div className="grid min-w-64">
             <span className="flex items-center gap-2 font-medium">
-              {row.original.label ?? 'Unlabelled phone'} {row.original.sample && <SampleTag />}
+              {row.original.label ?? 'Unlabelled phone'}
             </span>
             <span className="font-mono text-xs text-muted-foreground">{row.original.id}</span>
             {row.original.keyFingerprint && (
@@ -302,7 +302,7 @@ export default function DevicesPage() {
         description="Company phones bound to agents. A lost or replaced phone must be revoked before the agent can continue."
         actions={manage && <BindDeviceDialog pairs={pairs} nameOf={nameOf} />}
       />
-      <MockNotice endpoint="listDevices" />
+      <LoadError error={error} />
       <DataTable
         columns={columns}
         data={rows}

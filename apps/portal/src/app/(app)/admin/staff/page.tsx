@@ -5,7 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Check, Copy, Loader2, UserPlus, Users } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
-import { MockNotice } from '@/components/mock-notice';
+import { LoadError } from '@/components/load-error';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogTrigger } from '@/components
 import { Field } from '@/components/ui/field';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
-import { RecordStatus, SampleTag, StatusChip } from '@/components/ui/status-chip';
+import { RecordStatus, StatusChip } from '@/components/ui/status-chip';
 import { creatableRoles, ROLE_LABELS } from '@/lib/access';
 import { createStaffUser, listStaff, type StaffSummary } from '@/lib/api';
 import { useSession } from '@/lib/auth-context';
@@ -163,7 +163,7 @@ function AddStaffDialog() {
                       />
                       <span className="flex-1">{b.name}</span>
                       <span className="font-mono text-xs text-muted-foreground">{b.code}</span>
-                      {b.sample && <SampleTag />}
+
                     </label>
                   ))}
                 </div>
@@ -195,7 +195,7 @@ function AddStaffDialog() {
 export default function StaffPage() {
   const { claims } = useSession();
   const { scope, branchName } = useBranch();
-  const { rows, loading } = useList(() => listStaff({ branchId: scope ?? undefined }).then((r) => r.staff), [scope]);
+  const { rows, loading, error } = useList(() => listStaff({ branchId: scope ?? undefined }).then((r) => r.staff), [scope]);
   const canCreate = creatableRoles(claims.role).length > 0;
 
   const columns = useMemo<ColumnDef<StaffSummary, unknown>[]>(
@@ -206,7 +206,7 @@ export default function StaffPage() {
         cell: ({ row }) => (
           <div className="grid">
             <span className="flex items-center gap-2 font-medium">
-              {row.original.displayName} {row.original.sample && <SampleTag />}
+              {row.original.displayName}
             </span>
             <span className="text-[13px] text-muted-foreground">{row.original.email}</span>
           </div>
@@ -247,7 +247,7 @@ export default function StaffPage() {
         }
         actions={canCreate && <AddStaffDialog />}
       />
-      <MockNotice endpoint="listStaff" />
+      <LoadError error={error} />
       <DataTable
         columns={columns}
         data={rows}

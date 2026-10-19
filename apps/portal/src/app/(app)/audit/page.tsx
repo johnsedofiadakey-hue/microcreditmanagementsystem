@@ -3,12 +3,12 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { ScrollText } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { MockNotice } from '@/components/mock-notice';
+import { LoadError } from '@/components/load-error';
 import { DataTable } from '@/components/ui/data-table';
 import { Field } from '@/components/ui/field';
 import { NativeSelect } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
-import { SampleTag, StatusChip } from '@/components/ui/status-chip';
+import { StatusChip } from '@/components/ui/status-chip';
 import { listAuditEvents, type AuditEventSummary } from '@/lib/api';
 import { useBranch } from '@/lib/branch-context';
 import { useList } from '@/lib/use-list';
@@ -41,7 +41,7 @@ const ACTION_COPY: Record<string, string> = {
 export default function AuditPage() {
   const { scope, branchName } = useBranch();
   const [entityKind, setEntityKind] = useState('');
-  const { rows, loading } = useList(
+  const { rows, loading, error } = useList(
     () => listAuditEvents({ branchId: scope ?? undefined, entityKind: entityKind || undefined }).then((r) => r.events),
     [scope, entityKind],
   );
@@ -53,7 +53,7 @@ export default function AuditPage() {
         header: 'When (server time)',
         cell: ({ row }) => (
           <span className="flex items-center gap-2 text-[13px] whitespace-nowrap tabular-nums">
-            {formatDateTime(row.original.at)} {row.original.sample && <SampleTag />}
+            {formatDateTime(row.original.at)}
           </span>
         ),
       },
@@ -117,7 +117,7 @@ export default function AuditPage() {
           </Field>
         }
       />
-      <MockNotice endpoint="listAuditEvents" />
+      <LoadError error={error} />
       <DataTable
         columns={columns}
         data={rows}

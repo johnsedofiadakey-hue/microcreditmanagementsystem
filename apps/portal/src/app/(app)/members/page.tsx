@@ -5,10 +5,10 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Users } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { MockNotice } from '@/components/mock-notice';
+import { LoadError } from '@/components/load-error';
 import { DataTable } from '@/components/ui/data-table';
 import { PageHeader } from '@/components/ui/page-header';
-import { KycChip, RecordStatus, SampleTag } from '@/components/ui/status-chip';
+import { KycChip, RecordStatus } from '@/components/ui/status-chip';
 import { can } from '@/lib/access';
 import { useSession } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -36,7 +36,7 @@ export default function MembersPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  const { rows, loading } = useList(
+  const { rows, loading, error } = useList(
     () =>
       searchMembers({ branchId: scope ?? undefined, query: debounced, status: status || undefined }).then((r) => r.members),
     [scope, debounced, status],
@@ -52,7 +52,7 @@ export default function MembersPage() {
             href={`/members/${row.original.id}`}
             className="flex items-center gap-2 font-medium text-foreground hover:text-primary hover:underline focus-visible:underline focus-visible:outline-none"
           >
-            {row.original.fullName} {row.original.sample && <SampleTag />}
+            {row.original.fullName}
           </Link>
         ),
       },
@@ -96,7 +96,7 @@ export default function MembersPage() {
         description="Search by name, phone or full Ghana Card number. New members stay “Awaiting approval” until a second person approves them."
         actions={can.registerMember(claims.role) && <RegisterMemberDialog />}
       />
-      <MockNotice endpoint="searchMembers" />
+      <LoadError error={error} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           type="search"

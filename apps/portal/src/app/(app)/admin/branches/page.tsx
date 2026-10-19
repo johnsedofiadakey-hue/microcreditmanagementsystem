@@ -5,7 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Building2, Loader2, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
-import { MockNotice } from '@/components/mock-notice';
+import { LoadError } from '@/components/load-error';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogTrigger } from '@/components
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
-import { RecordStatus, SampleTag } from '@/components/ui/status-chip';
+import { RecordStatus } from '@/components/ui/status-chip';
 import { can } from '@/lib/access';
 import { createBranch, listBranches, type BranchSummary } from '@/lib/api';
 import { useSession } from '@/lib/auth-context';
@@ -27,7 +27,7 @@ const columns: ColumnDef<BranchSummary, unknown>[] = [
     cell: ({ row }) => (
       <div className="flex items-center gap-2">
         <span className="font-medium">{row.original.name}</span>
-        {row.original.sample && <SampleTag />}
+
       </div>
     ),
   },
@@ -119,7 +119,7 @@ function NewBranchDialog() {
 
 export default function BranchesPage() {
   const { claims } = useSession();
-  const { rows, loading } = useList(() => listBranches().then((r) => r.branches), []);
+  const { rows, loading, error } = useList(() => listBranches().then((r) => r.branches), []);
   const canCreate = can.createBranch(claims.role);
 
   return (
@@ -129,7 +129,7 @@ export default function BranchesPage() {
         description="Every branch has its own cash account and variance account in the ledger."
         actions={canCreate && <NewBranchDialog />}
       />
-      <MockNotice endpoint="listBranches" />
+      <LoadError error={error} />
       <DataTable
         columns={columns}
         data={rows}

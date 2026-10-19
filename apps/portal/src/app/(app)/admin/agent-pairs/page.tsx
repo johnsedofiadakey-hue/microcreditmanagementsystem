@@ -5,7 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Loader2, Plus, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
-import { MockNotice } from '@/components/mock-notice';
+import { LoadError } from '@/components/load-error';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogTrigger } from '@/components
 import { Field } from '@/components/ui/field';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
-import { RecordStatus, SampleTag } from '@/components/ui/status-chip';
+import { RecordStatus } from '@/components/ui/status-chip';
 import { can } from '@/lib/access';
 import { createAgentPair, listAgentPairs, listStaff, type AgentPairSummary, type StaffSummary } from '@/lib/api';
 import { useSession } from '@/lib/auth-context';
@@ -157,7 +157,7 @@ function NewPairDialog({ pairs }: { pairs: AgentPairSummary[] }) {
 export default function AgentPairsPage() {
   const { claims } = useSession();
   const { scope, branchName } = useBranch();
-  const { rows, loading } = useList(() => listAgentPairs({ branchId: scope ?? undefined }).then((r) => r.agentPairs), [scope]);
+  const { rows, loading, error } = useList(() => listAgentPairs({ branchId: scope ?? undefined }).then((r) => r.agentPairs), [scope]);
   const { rows: staff } = useList(() => listStaff({}).then((r) => r.staff), []);
   const nameOf = useMemo(() => {
     const byUid = new Map(staff.map((s) => [s.uid, s.displayName]));
@@ -171,7 +171,7 @@ export default function AgentPairsPage() {
         header: 'Pair',
         cell: ({ row }) => (
           <span className="flex items-center gap-2 font-medium">
-            {row.original.name} {row.original.sample && <SampleTag />}
+            {row.original.name}
           </span>
         ),
       },
@@ -203,7 +203,7 @@ export default function AgentPairsPage() {
         description="Agents always collect in pairs. Each pair holds collected cash in its custody account until handover."
         actions={can.createAgentPair(claims.role) && <NewPairDialog pairs={rows} />}
       />
-      <MockNotice endpoint="listAgentPairs" />
+      <LoadError error={error} />
       <DataTable
         columns={columns}
         data={rows}

@@ -82,14 +82,3 @@ export function KycChip({ status }: { status: string }) {
     </StatusChip>
   );
 }
-
-export function SampleTag() {
-  return (
-    <span
-      title="Sample row shown until the list endpoint is built. It does not exist on the server."
-      className="rounded-md border border-dashed border-border px-1.5 py-px text-[11px] font-medium text-muted-foreground"
-    >
-      Sample
-    </span>
-  );
-}

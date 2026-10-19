@@ -4,11 +4,11 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowRight, ClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
-import { MockNotice } from '@/components/mock-notice';
+import { LoadError } from '@/components/load-error';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
 import { PageHeader } from '@/components/ui/page-header';
-import { SampleTag, StatusChip } from '@/components/ui/status-chip';
+import { StatusChip } from '@/components/ui/status-chip';
 import { useSession } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { listPendingApprovals, type PendingApproval } from '@/lib/members-api';
@@ -22,7 +22,7 @@ const KIND_LABEL: Record<PendingApproval['kind'], string> = {
 export default function ApprovalsPage() {
   const { user } = useSession();
   const { scope, branchName } = useBranch();
-  const { rows, loading } = useList(() => listPendingApprovals({ branchId: scope ?? undefined }).then((r) => r.items), [scope]);
+  const { rows, loading, error } = useList(() => listPendingApprovals({ branchId: scope ?? undefined }).then((r) => r.items), [scope]);
 
   const columns = useMemo<ColumnDef<PendingApproval, unknown>[]>(
     () => [
@@ -32,7 +32,7 @@ export default function ApprovalsPage() {
         cell: ({ row }) => (
           <div className="grid">
             <span className="flex items-center gap-2 font-medium">
-              {row.original.summary} {row.original.sample && <SampleTag />}
+              {row.original.summary}
             </span>
             <span className="text-[13px] text-muted-foreground">{KIND_LABEL[row.original.kind]}</span>
           </div>
@@ -85,7 +85,7 @@ export default function ApprovalsPage() {
         title="Approvals"
         description="Requests waiting for a second person. You can't approve anything you started yourself."
       />
-      <MockNotice endpoint="listPendingApprovals" />
+      <LoadError error={error} />
       <DataTable
         columns={columns}
         data={rows}

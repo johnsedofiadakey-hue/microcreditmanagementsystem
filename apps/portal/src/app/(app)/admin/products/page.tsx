@@ -5,7 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Loader2, Package, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
-import { MockNotice } from '@/components/mock-notice';
+import { LoadError } from '@/components/load-error';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogTrigger } from '@/components
 import { Field } from '@/components/ui/field';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
-import { RecordStatus, SampleTag } from '@/components/ui/status-chip';
+import { RecordStatus } from '@/components/ui/status-chip';
 import { can } from '@/lib/access';
 import { useSession } from '@/lib/auth-context';
 import { createSusuProduct, listSusuProducts, type ProductRow } from '@/lib/members-api';
@@ -28,7 +28,7 @@ const columns: ColumnDef<ProductRow, unknown>[] = [
     header: 'Product',
     cell: ({ row }) => (
       <span className="flex items-center gap-2 font-medium">
-        {row.original.name} {row.original.sample && <SampleTag />}
+        {row.original.name}
       </span>
     ),
   },
@@ -113,7 +113,7 @@ function NewProductDialog() {
 
 export default function ProductsPage() {
   const { claims } = useSession();
-  const { rows, loading } = useList(() => listSusuProducts().then((r) => r.products), []);
+  const { rows, loading, error } = useList(() => listSusuProducts().then((r) => r.products), []);
   return (
     <div className="grid gap-6">
       <PageHeader
@@ -121,7 +121,7 @@ export default function ProductsPage() {
         description="Products are versioned. Accounts stay on the version they were opened with."
         actions={can.createProduct(claims.role) && <NewProductDialog />}
       />
-      <MockNotice endpoint="listSusuProducts" />
+      <LoadError error={error} />
       <DataTable
         columns={columns}
         data={rows}
