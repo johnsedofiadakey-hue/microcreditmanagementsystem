@@ -148,12 +148,24 @@ Planned command types, same envelope: `HANDOVER_START` (Step 6), `WITHDRAWAL_REQ
 | `branchDashboards/{branchId}/syncHealth/{agentPairId}` | that branch's non-agent staff, head office | `{ branchId, agentPairId, devices: [{ deviceId, agentUid, status, lastSeq, received, posted, rejected, missingSeqCount, lastReceivedAt }], updatedAt }` — updated after every command. `missingSeqCount` > 0 means records the phone numbered never arrived (a crash can leave one; a growing count needs a supervisor) | **built — 19 Oct** |
 | `branchDashboards/{branchId}/days/{yyyy-mm-dd}` | that branch's non-agent staff, head office | `{ collectedPesewas, collectionCount, activePairs, handedOverPesewas, pendingSyncCount, closed }` | planned — Step 7. **Path changed 19 Oct**: it was documented as `dashboards/branches/{branchId}/days/{date}`, which has an odd number of segments and isn't a valid document path |
 | `dashboards/company/days/{yyyy-mm-dd}` | head office | `{ collectedPesewas, branchesClosed, branchesOpen, exceptions }` | planned — Step 7 |
-| `dashboards/company/live/exceptions` | head office | `{ openCommandFailures }` | **built — 19 Oct** |
-| `exceptions/{id}` | head office | `{ kind: 'COMMAND_FAILED' \| 'BALANCE_MISMATCH', status: 'OPEN' \| 'RESOLVED', openedAt, … }` — failed commands (`commandId`, `agentUid`, `deviceId`, `error`) and nightly reconciliation alerts (`count`, `sample`) | **built — 19 Oct** |
+| `dashboards/company/live/exceptions` | head office | `{ openCommandFailures, openSmsFailures }` | **built — 19 Oct** (`openSmsFailures` with Step 5) |
+| `dashboards/company/live/sms` | head office | `{ pending, failed, oldestPendingAt, updatedAt }` — SMS receipts still owed and given up; refreshed every minute by `dispatchSmsOutbox` | **built 19 Oct** |
+| `exceptions/{id}` | head office | `{ kind: 'COMMAND_FAILED' \| 'BALANCE_MISMATCH' \| 'SMS_FAILED', status: 'OPEN' \| 'RESOLVED', openedAt, … }` — failed commands (`commandId`, `agentUid`, `deviceId`, `error`), nightly reconciliation alerts (`count`, `sample`), and SMS receipts given up after 10 attempts or refused by the provider (`outboxId`, `dedupeKey`, `error`) | **built — 19 Oct** |
 | `agentPairs/{agentPairId}/routes/{yyyy-mm-dd}` | agents in that pair | `{ day, agentPairId, branchId, members: [{ memberId, susuAccountId, fullName, phoneMasked, expectedPesewas, productName, frequency }], updatedAt }` — every ACTIVE account of an ACTIVE member assigned to the pair (`assignCollector`), sorted by name; empty for an inactive pair. Rewritten on every assignment change and for every active pair at 00:05 Accra time (`publishDailyRoutes`). Every frequency is listed every day for now. Type: `RouteDoc` | **built 19 Oct** |
 | `agentPairs/{agentPairId}/memberSnapshots/{memberId}` | agents in that pair | `{ fullName, phoneMasked, ghanaCardMasked, accounts: [{ id, productName, status }], updatedAt }` — only members on the pair's route, only their accounts on that route; deleted when the member leaves the route. No photo (signed URLs expire; agents don't need KYC images). Type: `MemberSnapshotDoc` | **built 19 Oct** |
 
 Security rules already allow these reads, so UI can be built against the emulator with seeded docs.
+
+## 4a. SMS receipts — **built 19 Oct (Step 5)**
+
+Not a UI call — documented so the UI copy is right. Each POSTED collection writes one outbox row in the
+same transaction as the ledger posting. The receipt is sent right after posting and, if that fails, by
+`dispatchSmsOutbox` every minute with backoff (1, 2, 4 … minutes, max 6 h; 10 attempts), then an
+`SMS_FAILED` exception. A redelivered command never sends a second receipt; a crash mid-send can (rarely)
+send one twice. Text, one GSM-7 segment: `Susu: GHS 20.00 received 19 Oct 10:24. Balance GHS 120.00.
+Ref 357D5757. Keep this SMS as your receipt.` (`Ref` = the first 8 characters of the posting, the same
+reference the agent app and statement show.) Provider: `SMS_PROVIDER` = `log` (default, sends nothing) or
+`arkesel`; see `docs/ops/ENVIRONMENT_CHECKLIST.md`.
 
 ## 5. Storage — KYC photos — **rules built, changed 19 Oct**
 

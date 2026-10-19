@@ -5,6 +5,8 @@ import { createPgDatabase } from '../src/db/pg.js';
 import type { Database } from '../src/db/types.js';
 import { findLedgerAccountId, getBalance } from '../src/ledger/accounts.js';
 import { findBalanceMismatches } from '../src/ledger/reconcile.js';
+import { dispatchSmsOutbox } from '../src/messaging/dispatch.js';
+import type { SmsMessage, SmsProvider } from '../src/messaging/providers.js';
 import { createAgentPair } from '../src/org/agentPairs.js';
 import { recordStaffUser } from '../src/org/staff.js';
 import { seedBranch, signedCollection } from './helpers.js';
@@ -59,5 +61,25 @@ describe.skipIf(!url)('real Postgres under concurrency', () => {
     expect(attempts.filter((a) => a.status === 'fulfilled')).toHaveLength(1);
     const memberships = await db.query('select 1 from agent_pair_members where agent_uid = $1', ['agent-x']);
     expect(memberships.rowCount).toBe(1);
+  });
+
+  it('five dispatchers racing over the outbox send every receipt exactly once', async () => {
+    const sent: SmsMessage[] = [];
+    const slowProvider: SmsProvider = {
+      name: 'race',
+      async send(message) {
+        sent.push(message);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return { ok: true, providerMessageId: null };
+      },
+    };
+    const pending = await db.query<{ n: number }>(`select count(*)::int as n from outbox where status = 'PENDING'`);
+    expect(pending.rows[0]!.n).toBeGreaterThanOrEqual(50);
+    await Promise.all(Array.from({ length: 5 }, () => dispatchSmsOutbox(db, slowProvider, { brand: 'Susu', limit: 20 })));
+    await dispatchSmsOutbox(db, slowProvider, { brand: 'Susu', limit: 200 });
+    const references = sent.map((m) => m.reference);
+    expect(new Set(references).size).toBe(references.length);
+    expect(references.length).toBe(pending.rows[0]!.n);
+    expect((await db.query(`select 1 from outbox where status <> 'SENT'`)).rowCount).toBe(0);
   });
 });

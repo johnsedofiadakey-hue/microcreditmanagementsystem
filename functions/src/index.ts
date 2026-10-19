@@ -33,3 +33,4 @@ export { assignCollectorFn as assignCollector, unassignCollectorFn as unassignCo
 export { onAgentCommandCreated, retryFailedCommands } from './triggers/agentCommands.js';
 export { reconcileBalances } from './triggers/reconcile.js';
 export { publishDailyRoutes } from './triggers/routes.js';
+export { dispatchSmsOutboxJob as dispatchSmsOutbox } from './triggers/sms.js';

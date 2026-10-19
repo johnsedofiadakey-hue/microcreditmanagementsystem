@@ -4,7 +4,8 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { processAgentCommand } from '../commands/processAgentCommand.js';
 import { publishSyncHealth } from '../projections/firestore.js';
-import { DATABASE_URL, REGION, getDatabase } from '../runtime.js';
+import { DATABASE_URL, REGION, SMS_API_KEY, getDatabase } from '../runtime.js';
+import { sendSms } from './sms.js';
 
 /** Stop the trigger's own retries after this long; the sweeper below takes over. */
 const MAX_RETRY_AGE_MS = 6 * 60 * 60 * 1000;
@@ -17,7 +18,7 @@ const FAILED_MESSAGE = 'Not processed yet. It will be retried automatically — 
  * processAgentCommand is idempotent per command ID, so money moves exactly once.
  */
 export const onAgentCommandCreated = onDocumentCreated(
-  { document: 'commands/{commandId}', region: REGION, retry: true, secrets: [DATABASE_URL] },
+  { document: 'commands/{commandId}', region: REGION, retry: true, secrets: [DATABASE_URL, SMS_API_KEY] },
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
@@ -29,6 +30,7 @@ export const onAgentCommandCreated = onDocumentCreated(
       logger.info('Agent command processed', { commandId, status: result.status });
       const deviceId = snapshot.data()?.deviceId;
       if (typeof deviceId === 'string') await publishSyncHealth(getDatabase(), deviceId);
+      if (result.status === 'POSTED') await sendReceiptNow(commandId);
     } catch (error) {
       const age = Date.now() - Date.parse(event.time);
       if (age > MAX_RETRY_AGE_MS) {
@@ -40,6 +42,18 @@ export const onAgentCommandCreated = onDocumentCreated(
     }
   },
 );
+
+/**
+ * Send the member's receipt straight away instead of waiting for the sweep. Any failure is only
+ * logged: the outbox row was written with the posting, and the sweep will send it.
+ */
+async function sendReceiptNow(commandId: string): Promise<void> {
+  try {
+    await sendSms(getDatabase(), { dedupeKeys: [`sms:collection:${commandId}`], limit: 1 });
+  } catch (error) {
+    logger.warn('Immediate SMS receipt failed; the outbox sweep will retry', { commandId, error });
+  }
+}
 
 /**
  * A command the trigger gave up on: mark it FAILED for the agent, and open an exception that head
