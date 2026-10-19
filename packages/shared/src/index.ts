@@ -6,3 +6,4 @@ export * from './commands';
 export * from './requests';
 export * from './reads';
 export * from './errors';
+export * from './routes';

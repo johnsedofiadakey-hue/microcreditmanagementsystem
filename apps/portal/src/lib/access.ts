@@ -39,6 +39,8 @@ export const can = {
   /** approveMember checkers. The backend also refuses the person who registered the member. */
   approveMember: (role: Role) => ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER'].includes(role),
   openSusuAccount: (role: Role) => ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'].includes(role),
+  /** Decide which agent pair collects an account (assignCollector / unassignCollector). */
+  assignCollector: (role: Role) => ['SUPER_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR'].includes(role),
   createProduct: (role: Role) => role === 'SUPER_ADMIN',
   /** storage.rules canUploadKyc (API.md §5). */
   uploadKyc: (role: Role) => ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'].includes(role),

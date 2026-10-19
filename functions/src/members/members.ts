@@ -10,6 +10,7 @@ import type { Queryable } from '../db/types.js';
 import { ensureLedgerAccount } from '../ledger/accounts.js';
 import type { Actor } from '../lib/actor.js';
 import { writeAudit } from '../lib/audit.js';
+import { assignCollector } from '../routes/routes.js';
 import { DomainError } from '../lib/errors.js';
 import { requireBranch, requireRole } from '../lib/permissions.js';
 
@@ -154,7 +155,7 @@ export async function openSusuAccount(
   tx: Queryable,
   actor: Actor,
   input: OpenSusuAccountRequest,
-): Promise<{ susuAccountId: string }> {
+): Promise<{ susuAccountId: string; agentPairId: string | null }> {
   requireRole(actor, ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']);
 
   const memberResult = await tx.query<{ branch_id: string; status: string; full_name: string }>(
@@ -195,5 +196,9 @@ export async function openSusuAccount(
     channel: actor.channel,
     data: { memberId: input.memberId, productId: input.productId },
   });
-  return { susuAccountId: accountId };
+  // Optional: straight onto a route. Same checks and audit as assignCollector (cashiers can't assign).
+  if (input.collector) {
+    await assignCollector(tx, actor, { susuAccountId: accountId, ...input.collector });
+  }
+  return { susuAccountId: accountId, agentPairId: input.collector?.agentPairId ?? null };
 }

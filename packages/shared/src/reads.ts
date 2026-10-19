@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { KycStatus, MemberStatus, SusuFrequency } from './enums';
 import { memberStatusSchema } from './enums';
 import type { Role } from './roles';
+import type { AccountCollector } from './routes';
 
 /**
  * Read endpoints for the portal (API.md §2). Lists are scoped to the caller's branches; head-office
@@ -114,6 +115,8 @@ export interface MemberAccount {
   productName: string;
   balancePesewas: number;
   status: 'ACTIVE' | 'FROZEN' | 'CLOSED';
+  /** The agent pair that collects this account, or null when it is on no route. */
+  collector: AccountCollector | null;
 }
 export interface MemberProfile {
   id: string;
@@ -155,7 +158,7 @@ export interface StatementLine {
   batchId: string;
 }
 export interface AccountStatement {
-  account: MemberAccount & { memberId: string };
+  account: Omit<MemberAccount, 'collector'> & { memberId: string };
   /** Newest first. */
   lines: StatementLine[];
   nextCursor: string | null;

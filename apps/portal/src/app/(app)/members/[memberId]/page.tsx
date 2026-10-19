@@ -18,6 +18,7 @@ import { can } from '@/lib/access';
 import { useSession } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { LoadError } from '@/components/load-error';
+import { AssignCollectorDialog } from './assign-collector-dialog';
 import { toActionError } from '@/lib/errors';
 import { approveMember, getMember, listSusuProducts, openSusuAccount, type MemberProfile } from '@/lib/members-api';
 import { useAction } from '@/lib/use-action';
@@ -290,6 +291,23 @@ export default function MemberProfilePage() {
                       <span className="money w-32 text-right font-medium">{formatCedis(a.balancePesewas)}</span>
                       <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary" />
                     </Link>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+                      <p className="text-[13px] text-muted-foreground">
+                        {a.collector ? (
+                          <>
+                            Collected by <span className="font-medium text-foreground">{a.collector.agentPairName}</span> ·{' '}
+                            <span className="money">{formatCedis(a.collector.expectedPesewas)}</span> per visit
+                          </>
+                        ) : a.status === 'ACTIVE' ? (
+                          'Not on any route yet — agents can’t see this account.'
+                        ) : (
+                          'Not on any route.'
+                        )}
+                      </p>
+                      {member.status === 'ACTIVE' && a.status === 'ACTIVE' && can.assignCollector(claims.role) && (
+                        <AssignCollectorDialog account={a} branchId={member.branchId} memberName={member.fullName} />
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>

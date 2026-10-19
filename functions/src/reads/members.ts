@@ -120,11 +120,22 @@ export async function getMember(
   if (!m) throw new DomainError('MEMBER_NOT_FOUND', 'Member not found');
   requireBranch(actor, m.branch_id);
 
-  const accounts = await q.query<{ id: string; product_name: string; balance_pesewas: number; status: MemberAccount['status'] }>(
-    `select s.id, p.name as product_name, b.balance_pesewas, s.status
+  const accounts = await q.query<{
+    id: string;
+    product_name: string;
+    balance_pesewas: number;
+    status: MemberAccount['status'];
+    agent_pair_id: string | null;
+    agent_pair_name: string | null;
+    expected_pesewas: string | number | null;
+  }>(
+    `select s.id, p.name as product_name, b.balance_pesewas, s.status,
+            r.agent_pair_id, ap.name as agent_pair_name, r.expected_pesewas
        from susu_accounts s
        join susu_products p on p.id = s.product_id
        join account_balances b on b.account_id = s.ledger_account_id
+       left join route_assignments r on r.susu_account_id = s.id
+       left join agent_pairs ap on ap.id = r.agent_pair_id
       where s.member_id = $1
       order by s.opened_at, s.id`,
     [input.memberId],
@@ -154,6 +165,9 @@ export async function getMember(
         productName: a.product_name,
         balancePesewas: a.balance_pesewas,
         status: a.status,
+        collector: a.agent_pair_id
+          ? { agentPairId: a.agent_pair_id, agentPairName: a.agent_pair_name ?? '', expectedPesewas: Number(a.expected_pesewas) }
+          : null,
       })),
     },
     // Only ever sign paths inside this member's own folder (audit M6).

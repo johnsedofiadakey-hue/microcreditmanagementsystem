@@ -22,7 +22,7 @@ import { createAgentPair } from '../org/agentPairs.js';
 import { createBranch } from '../org/branches.js';
 import { bindDevice, describeEnrollment, revokeDevice, type EnrollmentRecord } from '../org/devices.js';
 import { createStaffUserFlow, type StaffAuth } from '../org/staff.js';
-import { publishDeviceStatus } from '../projections/firestore.js';
+import { publishDeviceStatus, publishRoutes } from '../projections/firestore.js';
 import { staffCallable } from './staffCallable.js';
 
 export const createBranchFn = staffCallable(createBranchRequestSchema, ({ db, actor, input }) =>
@@ -108,6 +108,8 @@ export const createSusuProductFn = staffCallable(createSusuProductRequestSchema,
   db.transaction((tx) => createSusuProduct(tx, actor, input)),
 );
 
-export const openSusuAccountFn = staffCallable(openSusuAccountRequestSchema, ({ db, actor, input }) =>
-  db.transaction((tx) => openSusuAccount(tx, actor, input)),
-);
+export const openSusuAccountFn = staffCallable(openSusuAccountRequestSchema, async ({ db, actor, input }) => {
+  const { susuAccountId, agentPairId } = await db.transaction((tx) => openSusuAccount(tx, actor, input));
+  if (agentPairId) await publishRoutes(db, [agentPairId]);
+  return { susuAccountId };
+});

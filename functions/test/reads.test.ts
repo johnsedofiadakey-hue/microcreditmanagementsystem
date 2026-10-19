@@ -143,7 +143,7 @@ describe('getMember', () => {
       photoCount: 0,
       photoUrls: [],
     });
-    expect(profile.accounts).toEqual([{ id: seed.susuAccountId, productName: 'Daily Susu', balancePesewas: 2_500, status: 'ACTIVE' }]);
+    expect(profile.accounts).toEqual([{ id: seed.susuAccountId, productName: 'Daily Susu', balancePesewas: 2_500, status: 'ACTIVE', collector: null }]);
   });
 
   it('full Ghana Card and photos only for SUPER_ADMIN, COMPLIANCE, or that branch’s manager', async () => {

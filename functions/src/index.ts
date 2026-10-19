@@ -29,5 +29,7 @@ export {
   listSusuProductsFn as listSusuProducts,
   searchMembersFn as searchMembers,
 } from './callables/reads.js';
+export { assignCollectorFn as assignCollector, unassignCollectorFn as unassignCollector } from './callables/routes.js';
 export { onAgentCommandCreated, retryFailedCommands } from './triggers/agentCommands.js';
 export { reconcileBalances } from './triggers/reconcile.js';
+export { publishDailyRoutes } from './triggers/routes.js';

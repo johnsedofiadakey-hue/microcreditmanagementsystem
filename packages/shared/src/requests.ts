@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { roleSchema } from './roles';
 import { susuFrequencySchema } from './enums';
+import { collectorSchema } from './routes';
 
 /** Request bodies for portal callable functions. Names match `docs/contracts/API.md`. */
 
@@ -101,5 +102,7 @@ export type CreateSusuProductRequest = z.infer<typeof createSusuProductRequestSc
 export const openSusuAccountRequestSchema = z.object({
   memberId: z.uuid(),
   productId: z.uuid(),
+  /** Optional: put the new account straight onto an agent pair's route. */
+  collector: collectorSchema.optional(),
 });
 export type OpenSusuAccountRequest = z.infer<typeof openSusuAccountRequestSchema>;

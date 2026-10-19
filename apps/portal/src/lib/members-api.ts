@@ -3,6 +3,7 @@
 import type {
   AccountStatement,
   ApproveMemberRequest,
+  AssignCollectorRequest,
   CreateSusuProductRequest,
   MemberProfile,
   MemberRow,
@@ -11,13 +12,14 @@ import type {
   PendingApproval,
   ProductRow,
   RegisterMemberRequest,
+  UnassignCollectorRequest,
 } from '@susu/shared';
 import { FirebaseError } from 'firebase/app';
 import { ref, uploadBytes } from 'firebase/storage';
 import { call, LIST_LIMIT, write } from './api';
 import { firebase } from './firebase';
 
-export type { MemberAccount, MemberProfile, MemberRow, PendingApproval, ProductRow, StatementLine } from '@susu/shared';
+export type { AccountCollector, MemberAccount, MemberProfile, MemberRow, PendingApproval, ProductRow, StatementLine } from '@susu/shared';
 
 /** Members, products and Susu accounts (API.md §2). Lists are scoped to the caller's branches on the server. */
 
@@ -43,6 +45,15 @@ export async function createSusuProduct(input: CreateSusuProductRequest) {
 
 export async function openSusuAccount(input: OpenSusuAccountRequest) {
   return write<OpenSusuAccountRequest, { susuAccountId: string }>('openSusuAccount', input);
+}
+
+/** Put an account on an agent pair's route; the agents' phones get it straight away (API.md §2). */
+export async function assignCollector(input: AssignCollectorRequest) {
+  await write<AssignCollectorRequest, null>('assignCollector', input);
+}
+
+export async function unassignCollector(input: UnassignCollectorRequest) {
+  await write<UnassignCollectorRequest, null>('unassignCollector', input);
 }
 
 /**

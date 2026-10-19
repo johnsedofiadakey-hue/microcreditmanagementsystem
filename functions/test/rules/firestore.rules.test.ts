@@ -150,6 +150,14 @@ describe('projections are read-only and scoped', () => {
     await assertFails(setDoc(doc(agent(), 'agentPairs', PAIR, 'routes', 'today'), { x: 1 }));
   });
 
+  it('member snapshots: only the pair’s agents read them; staff and other pairs cannot', async () => {
+    const path = ['agentPairs', PAIR, 'memberSnapshots', 'member-1'] as const;
+    await assertSucceeds(getDoc(doc(agent(), ...path)));
+    await assertFails(getDoc(doc(otherAgent(), ...path)));
+    await assertFails(getDoc(doc(manager(), ...path)));
+    await assertFails(setDoc(doc(agent(), ...path), { fullName: 'x' }));
+  });
+
   it('branch dashboards are visible to that branch staff and head office only', async () => {
     for (const path of [['days', '2026-10-19'], ['syncHealth', PAIR]] as const) {
       await assertSucceeds(getDoc(doc(manager(), 'branchDashboards', BRANCH, ...path)));

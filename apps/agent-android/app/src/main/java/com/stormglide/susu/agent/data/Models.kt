@@ -16,8 +16,6 @@ data class RouteMember(
     val fullName: String,
     val phoneMasked: String,
     val expectedPesewas: Long,
-    /** UI-only: true for sample rows shown in debug builds until the route read model exists. */
-    val sample: Boolean = false,
 )
 
 enum class SyncState { PENDING_SYNC, SYNCED, REJECTED, FAILED }

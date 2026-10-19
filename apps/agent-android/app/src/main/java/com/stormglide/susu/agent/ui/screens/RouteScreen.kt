@@ -98,7 +98,7 @@ fun RouteScreen(
                 ) {
                     Avatar(member.fullName)
                     Column(Modifier.weight(1f)) {
-                        Text(member.fullName + if (member.sample) "  · sample" else "", style = MaterialTheme.typography.titleMedium)
+                        Text(member.fullName, style = MaterialTheme.typography.titleMedium)
                         Text(member.phoneMasked, style = MaterialTheme.typography.bodyMedium, color = SusuColors.Muted)
                         if (recorded.isNotEmpty()) {
                             Text(
