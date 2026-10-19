@@ -1,4 +1,4 @@
-import type { AgentPairSummary, BranchSummary, DeviceSummary, ProductRow, Role, StaffSummary } from '@susu/shared';
+import type { AgentPairSummary, BranchSummary, BusinessSummary, DeviceSummary, ProductRow, Role, StaffSummary } from '@susu/shared';
 import type { Queryable } from '../db/types.js';
 import type { Actor } from '../lib/actor.js';
 import { requireRole } from '../lib/permissions.js';
@@ -94,7 +94,18 @@ export async function listDevices(q: Queryable, actor: Actor, input: { branchId?
 export async function listSusuProducts(q: Queryable, actor: Actor): Promise<{ products: ProductRow[] }> {
   requireRole(actor, STAFF_READERS);
   const result = await q.query<ProductRow>(
-    `select id, code, version, name, frequency, status from susu_products order by status, code, version desc`,
+    `select id, business_id as "businessId", code, version, name, frequency, status
+       from susu_products order by status, business_id, code, version desc`,
   );
   return { products: result.rows };
+}
+
+/** The client's businesses (ADR-001). Readable by all staff: it is how screens label and filter money. */
+export async function listBusinesses(q: Queryable, actor: Actor): Promise<{ businesses: BusinessSummary[] }> {
+  requireRole(actor, STAFF_READERS);
+  const result = await q.query<BusinessSummary>(
+    `select id, code, name, sms_brand as "smsBrand", sms_sender_id as "smsSenderId", address, status
+       from businesses order by code`,
+  );
+  return { businesses: result.rows };
 }

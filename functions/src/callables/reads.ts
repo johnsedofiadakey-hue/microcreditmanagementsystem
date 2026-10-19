@@ -7,6 +7,7 @@ import {
   listDevicesRequestSchema,
   listPendingApprovalsRequestSchema,
   listStaffRequestSchema,
+  listBusinessesRequestSchema,
   listSusuProductsRequestSchema,
   searchMembersRequestSchema,
   type MemberProfile,
@@ -15,7 +16,7 @@ import { getStorage } from 'firebase-admin/storage';
 import { logger } from 'firebase-functions';
 import { listAuditEvents } from '../reads/audit.js';
 import { getAccountStatement, getMember, listPendingApprovals, searchMembers } from '../reads/members.js';
-import { listAgentPairs, listBranches, listDevices, listStaff, listSusuProducts } from '../reads/org.js';
+import { listAgentPairs, listBranches, listBusinesses, listDevices, listStaff, listSusuProducts } from '../reads/org.js';
 import { staffCallable } from './staffCallable.js';
 
 const PHOTO_URL_TTL_MS = 5 * 60 * 1000;
@@ -25,6 +26,7 @@ export const listStaffFn = staffCallable(listStaffRequestSchema, ({ db, actor, i
 export const listAgentPairsFn = staffCallable(listAgentPairsRequestSchema, ({ db, actor, input }) => listAgentPairs(db, actor, input));
 export const listDevicesFn = staffCallable(listDevicesRequestSchema, ({ db, actor, input }) => listDevices(db, actor, input));
 export const listSusuProductsFn = staffCallable(listSusuProductsRequestSchema, ({ db, actor }) => listSusuProducts(db, actor));
+export const listBusinessesFn = staffCallable(listBusinessesRequestSchema, ({ db, actor }) => listBusinesses(db, actor));
 export const searchMembersFn = staffCallable(searchMembersRequestSchema, ({ db, actor, input }) => searchMembers(db, actor, input));
 export const getAccountStatementFn = staffCallable(getAccountStatementRequestSchema, ({ db, actor, input }) =>
   getAccountStatement(db, actor, input),

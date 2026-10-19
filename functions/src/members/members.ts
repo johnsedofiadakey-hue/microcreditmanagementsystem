@@ -127,17 +127,23 @@ export async function createSusuProduct(
   input: CreateSusuProductRequest,
 ): Promise<{ productId: string; version: number }> {
   requireRole(actor, ['SUPER_ADMIN']);
+  const business = await tx.query<{ status: string }>('select status from businesses where id = $1', [input.businessId]);
+  if (!business.rows[0] || business.rows[0].status !== 'ACTIVE') throw new DomainError('NOT_FOUND', 'Active business not found');
+  // Product codes and versions are per business: each keeps its own catalogue.
   const latest = await tx.query<{ version: number }>(
-    'select max(version)::int as version from susu_products where code = $1',
-    [input.code],
+    'select max(version)::int as version from susu_products where business_id = $1 and code = $2',
+    [input.businessId, input.code],
   );
   const version = (latest.rows[0]?.version ?? 0) + 1;
   if (version > 1) {
-    await tx.query(`update susu_products set status = 'RETIRED' where code = $1 and status = 'ACTIVE'`, [input.code]);
+    await tx.query(`update susu_products set status = 'RETIRED' where business_id = $1 and code = $2 and status = 'ACTIVE'`, [
+      input.businessId,
+      input.code,
+    ]);
   }
   const created = await tx.query<{ id: string }>(
-    `insert into susu_products (code, version, name, frequency, created_by) values ($1, $2, $3, $4, $5) returning id`,
-    [input.code, version, input.name, input.frequency, actor.uid],
+    `insert into susu_products (business_id, code, version, name, frequency, created_by) values ($1, $2, $3, $4, $5, $6) returning id`,
+    [input.businessId, input.code, version, input.name, input.frequency, actor.uid],
   );
   const productId = created.rows[0]!.id;
   await writeAudit(tx, {
@@ -167,9 +173,10 @@ export async function openSusuAccount(
   requireBranch(actor, member.branch_id);
   if (member.status !== 'ACTIVE') throw new DomainError('MEMBER_NOT_ACTIVE', `Member is ${member.status}`);
 
-  const product = await tx.query<{ status: string; code: string }>('select status, code from susu_products where id = $1', [
-    input.productId,
-  ]);
+  const product = await tx.query<{ status: string; code: string; business_id: string }>(
+    'select status, code, business_id from susu_products where id = $1',
+    [input.productId],
+  );
   if (!product.rows[0] || product.rows[0].status !== 'ACTIVE') {
     throw new DomainError('NOT_FOUND', 'Active Susu product not found');
   }
@@ -179,6 +186,8 @@ export async function openSusuAccount(
     kind: 'MEMBER_SUSU',
     ownerId: accountId,
     branchId: member.branch_id,
+    // The account belongs to its product's business (database-checked).
+    businessId: product.rows[0].business_id,
     name: `${member.full_name} — ${product.rows[0].code}`,
   });
 

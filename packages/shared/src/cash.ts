@@ -27,6 +27,8 @@ const note = z.string().trim().max(500).optional();
 export const recordHandoverRequestSchema = z
   .object({
     agentPairId: z.uuid(),
+    /** Each business's cash is handed over separately (ADR-001). */
+    businessId: z.uuid(),
     /** What the cashier saw as expected when counting; refused with CONFLICT if it has changed since. */
     expectedPesewas: pesewasSchema,
     countedPesewas: pesewasSchema,
@@ -43,10 +45,13 @@ export interface HandoverResult {
   caseId: string | null;
 }
 
-export const listHandoversRequestSchema = z.object({ branchId: z.uuid().optional(), day: branchDaySchema.optional() }).strict();
+export const listHandoversRequestSchema = z
+  .object({ branchId: z.uuid().optional(), businessId: z.uuid().optional(), day: branchDaySchema.optional() })
+  .strict();
 export interface HandoverSummary {
   id: string;
   branchId: string;
+  businessId: string;
   agentPairId: string;
   agentPairName: string;
   day: string;
@@ -81,11 +86,13 @@ export const rejectWithdrawalRequestSchema = z.object({ withdrawalId: z.uuid(), 
 export type RejectWithdrawalRequest = z.infer<typeof rejectWithdrawalRequestSchema>;
 
 export const listWithdrawalsRequestSchema = z
-  .object({ branchId: z.uuid().optional(), status: z.enum(WITHDRAWAL_STATUSES).optional() })
+  .object({ branchId: z.uuid().optional(), businessId: z.uuid().optional(), status: z.enum(WITHDRAWAL_STATUSES).optional() })
   .strict();
 export interface WithdrawalSummary {
   id: string;
   branchId: string;
+  /** The account's business, whose vault pays it. */
+  businessId: string;
   memberId: string;
   memberName: string;
   susuAccountId: string;
@@ -113,11 +120,12 @@ export const resolveCaseRequestSchema = z.object({ caseId: z.uuid(), resolution:
 export type ResolveCaseRequest = z.infer<typeof resolveCaseRequestSchema>;
 
 export const listCasesRequestSchema = z
-  .object({ branchId: z.uuid().optional(), status: z.enum(['OPEN', 'RESOLVED']).optional() })
+  .object({ branchId: z.uuid().optional(), businessId: z.uuid().optional(), status: z.enum(['OPEN', 'RESOLVED']).optional() })
   .strict();
 export interface CaseSummary {
   id: string;
   branchId: string;
+  businessId: string;
   kind: CaseKind;
   status: 'OPEN' | 'RESOLVED';
   /** Signed: negative is a shortage. */
@@ -135,27 +143,31 @@ export interface CaseSummary {
 // ── Branch close ──
 
 export const submitBranchCountRequestSchema = z
-  .object({ branchId: z.uuid(), day: branchDaySchema, countedPesewas: pesewasSchema, note })
+  .object({ branchId: z.uuid(), businessId: z.uuid(), day: branchDaySchema, countedPesewas: pesewasSchema, note })
   .strict();
 export type SubmitBranchCountRequest = z.infer<typeof submitBranchCountRequestSchema>;
 
-export const closeBranchDayRequestSchema = z.object({ branchId: z.uuid(), day: branchDaySchema, note }).strict();
+export const closeBranchDayRequestSchema = z.object({ branchId: z.uuid(), businessId: z.uuid(), day: branchDaySchema, note }).strict();
 export type CloseBranchDayRequest = z.infer<typeof closeBranchDayRequestSchema>;
 
-export const getBranchCloseRequestSchema = z.object({ branchId: z.uuid(), day: branchDaySchema }).strict();
+export const getBranchCloseRequestSchema = z.object({ branchId: z.uuid(), businessId: z.uuid(), day: branchDaySchema }).strict();
+/** Every business's checklist for one branch day — the cashier's and manager's main screen. */
+export const getBranchCashDayRequestSchema = z.object({ branchId: z.uuid(), day: branchDaySchema }).strict();
 
 export interface PairCashPosition {
   agentPairId: string;
   agentPairName: string;
-  /** Posted collections not yet handed over (the pair's custody balance). */
+  /** Posted collections of this business not yet handed over (the pair's custody balance for it). */
   custodyPesewas: number;
   /** Records the pair's phones numbered that never reached the server (sync health missingSeqCount). */
   missingRecordCount: number;
 }
 
-/** What a branch close is checked against. Computed live until the day is closed, then frozen. */
+/** What a branch close is checked against, for one business. Computed live until that business's day is closed, then frozen. */
 export interface BranchCloseChecklist {
   branchId: string;
+  businessId: string;
+  businessName: string;
   day: string;
   status: 'OPEN' | 'COUNTED' | 'CLOSED';
   /** BRANCH_CASH ledger balance — what the vault should hold. */
@@ -173,4 +185,11 @@ export interface BranchCloseChecklist {
   warnings: string[];
   closedBy: string | null;
   closedAt: string | null;
+}
+
+export interface BranchCashDay {
+  branchId: string;
+  day: string;
+  /** One per active business, in business-code order. */
+  businesses: BranchCloseChecklist[];
 }

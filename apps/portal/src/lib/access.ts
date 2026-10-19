@@ -106,7 +106,7 @@ export const NAV: NavSection[] = [
       },
       {
         href: '/admin/products',
-        label: 'Susu products',
+        label: 'Products',
         icon: Package,
         roles: ['SUPER_ADMIN', 'FINANCE', 'COMPLIANCE', 'BRANCH_MANAGER'],
       },

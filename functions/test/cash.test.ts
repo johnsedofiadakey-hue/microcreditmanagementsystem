@@ -37,21 +37,21 @@ async function collect(amountPesewas: number) {
 }
 
 const balance = async (kind: Parameters<typeof findLedgerAccountId>[1], ownerId: string) =>
-  getBalance(db, (await findLedgerAccountId(db, kind, ownerId))!);
+  getBalance(db, (await findLedgerAccountId(db, kind, ownerId, seed.businessId))!);
 const custody = () => balance('AGENT_CASH_CUSTODY', seed.agentPairId);
 const branchCash = () => balance('BRANCH_CASH', seed.branchId);
 const variance = () => balance('BRANCH_CASH_VARIANCE', seed.branchId);
 const member = () => balance('MEMBER_SUSU', seed.susuAccountId);
 
 const handover = (expectedPesewas: number, countedPesewas: number, who = seed.cashier) =>
-  db.transaction((tx) => recordHandover(tx, who, { agentPairId: seed.agentPairId, expectedPesewas, countedPesewas }));
+  db.transaction((tx) => recordHandover(tx, who, { agentPairId: seed.agentPairId, businessId: seed.businessId, expectedPesewas, countedPesewas }));
 const request = (amountPesewas: number, who = seed.cashier) =>
   db.transaction((tx) => requestWithdrawal(tx, who, { susuAccountId: seed.susuAccountId, amountPesewas, reason: 'School fees' }));
 const approve = (withdrawalId: string, who = seed.manager) => db.transaction((tx) => approveWithdrawal(tx, who, { withdrawalId }));
 const pay = (withdrawalId: string, who = cashier2()) => db.transaction((tx) => payWithdrawal(tx, who, { withdrawalId }));
 const count = (countedPesewas: number, who = seed.cashier) =>
-  db.transaction((tx) => submitBranchCount(tx, who, { branchId: seed.branchId, day: today(), countedPesewas }));
-const close = (who = seed.manager) => db.transaction((tx) => closeBranchDay(tx, who, { branchId: seed.branchId, day: today() }));
+  db.transaction((tx) => submitBranchCount(tx, who, { branchId: seed.branchId, businessId: seed.businessId, day: today(), countedPesewas }));
+const close = (who = seed.manager) => db.transaction((tx) => closeBranchDay(tx, who, { branchId: seed.branchId, businessId: seed.businessId, day: today() }));
 
 describe('a full branch day (BUILD_PLAN Step 6 “done when”)', () => {
   it('collections → handover → withdrawal paid → count → close, with balanced books', async () => {
@@ -60,7 +60,7 @@ describe('a full branch day (BUILD_PLAN Step 6 “done when”)', () => {
     await collect(2_000);
     expect(await custody()).toBe(6_000);
 
-    const before = await getBranchClose(db, seed.cashier, { branchId: seed.branchId, day: today() });
+    const before = await getBranchClose(db, seed.cashier, { branchId: seed.branchId, businessId: seed.businessId, day: today() });
     expect(before.pairs).toEqual([{ agentPairId: seed.agentPairId, agentPairName: 'Pair 1', custodyPesewas: 6_000, missingRecordCount: 0 }]);
     expect(before.warnings).toContain('Pair 1 still holds GH₵ 60.00 not handed over');
 
@@ -98,7 +98,7 @@ describe('a full branch day (BUILD_PLAN Step 6 “done when”)', () => {
       warnings: [],
       closedBy: 'manager-1',
     });
-    const frozen = await branchCloseChecklist(db, seed.branchId, today());
+    const frozen = await branchCloseChecklist(db, seed.branchId, seed.businessId, today());
     expect(frozen).toMatchObject({ status: 'CLOSED', closedBy: 'manager-1', count: { countedPesewas: 4_500, countedBy: 'cashier-1' } });
 
     expect(await findBalanceMismatches(db)).toEqual([]);
@@ -240,7 +240,7 @@ describe('branch close', () => {
     await collect(1_000);
     await handover(1_000, 1_000);
     await expect(close()).rejects.toMatchObject({ reason: 'EXPECTED_CASH_CHANGED', details: { expectedPesewas: 6_000 } });
-    const checklist = await branchCloseChecklist(db, seed.branchId, today());
+    const checklist = await branchCloseChecklist(db, seed.branchId, seed.businessId, today());
     expect(checklist.warnings).toContain('Cash moved after the last count — count again before closing');
     await count(6_000);
     await expect(close()).resolves.toMatchObject({ differencePesewas: 0 });
@@ -276,7 +276,7 @@ describe('branch close', () => {
 
   it('only today can be counted or closed', async () => {
     await expect(
-      db.transaction((tx) => submitBranchCount(tx, seed.cashier, { branchId: seed.branchId, day: '2020-01-01', countedPesewas: 1 })),
+      db.transaction((tx) => submitBranchCount(tx, seed.cashier, { branchId: seed.branchId, businessId: seed.businessId, day: '2020-01-01', countedPesewas: 1 })),
     ).rejects.toMatchObject({ reason: 'INVALID_COMMAND' });
   });
 });
@@ -326,7 +326,7 @@ describe('reads are scoped', () => {
     expect((await listWithdrawals(db, otherManager, {})).withdrawals).toEqual([]);
     expect((await listHandovers(db, otherManager, {})).handovers).toEqual([]);
     await expect(listWithdrawals(db, otherManager, { branchId: seed.branchId })).rejects.toMatchObject({ reason: 'NOT_PERMITTED' });
-    await expect(getBranchClose(db, otherManager, { branchId: seed.branchId, day: today() })).rejects.toMatchObject({ reason: 'NOT_PERMITTED' });
+    await expect(getBranchClose(db, otherManager, { branchId: seed.branchId, businessId: seed.businessId, day: today() })).rejects.toMatchObject({ reason: 'NOT_PERMITTED' });
     await expect(listCases(db, agentActor(), {})).rejects.toMatchObject({ reason: 'NOT_PERMITTED' });
     expect((await listWithdrawals(db, finance(), {})).withdrawals).toHaveLength(1);
   });

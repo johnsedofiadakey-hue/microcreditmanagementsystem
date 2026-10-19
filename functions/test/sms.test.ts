@@ -71,7 +71,9 @@ describe('SMS receipts for posted collections', () => {
     const [message] = provider.calls;
     expect(message!.to).toBe('+233241234567');
     expect(message!.reference).toBe(key);
-    expect(message!.text).toMatch(/^Susu: GHS 20\.00 received \d{2} \w{3} \d{2}:\d{2}\. Balance GHS 20\.00\. Ref [0-9A-F]{8}\./);
+    // The receipt carries the account's business: its brand and its registered sender ID (ADR-001).
+    expect(message!.senderId).toBe('GadufiaSusu');
+    expect(message!.text).toMatch(/^Gadufia Susu: GHS 20\.00 received \d{2} \w{3} \d{2}:\d{2}\. Balance GHS 20\.00\. Ref [0-9A-F]{8}\./);
     expect(isGsm7(message!.text)).toBe(true);
     expect(gsm7Length(message!.text)).toBeLessThanOrEqual(SMS_SEGMENT_GSM7);
 

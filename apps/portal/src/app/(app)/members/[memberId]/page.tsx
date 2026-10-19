@@ -22,6 +22,7 @@ import { AssignCollectorDialog } from './assign-collector-dialog';
 import { toActionError } from '@/lib/errors';
 import { approveMember, getMember, listSusuProducts, openSusuAccount, type MemberProfile } from '@/lib/members-api';
 import { useAction } from '@/lib/use-action';
+import { useBusinesses } from '@/lib/use-businesses';
 import { useList } from '@/lib/use-list';
 import { formatDateTime } from '@/lib/utils';
 
@@ -90,6 +91,7 @@ function ApprovalPanel({ member }: { member: MemberProfile }) {
 
 function OpenAccountDialog({ member }: { member: MemberProfile }) {
   const [open, setOpen] = useState(false);
+  const { name: businessName } = useBusinesses();
   const { rows: products } = useList(() => listSusuProducts().then((r) => r.products.filter((p) => p.status === 'ACTIVE')), []);
   const [productId, setProductId] = useState('');
   const action = useAction(openSusuAccountRequestSchema, openSusuAccount);
@@ -125,7 +127,7 @@ function OpenAccountDialog({ member }: { member: MemberProfile }) {
               <option value="">Select a product</option>
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} · {p.frequency.toLowerCase()} · v{p.version}
+                  {businessName(p.businessId)} — {p.name} · {p.frequency.toLowerCase()} · v{p.version}
                 </option>
               ))}
             </NativeSelect>
@@ -285,7 +287,9 @@ export default function MemberProfilePage() {
                         <span className="flex items-center gap-2 font-medium group-hover:text-primary group-focus-visible:underline">
                           {a.productName}
                         </span>
-                        <span className="font-mono text-xs text-muted-foreground">{a.id.slice(0, 8)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {a.businessName} · <span className="font-mono">{a.id.slice(0, 8)}</span>
+                        </span>
                       </div>
                       <RecordStatus status={a.status} />
                       <span className="money w-32 text-right font-medium">{formatCedis(a.balancePesewas)}</span>

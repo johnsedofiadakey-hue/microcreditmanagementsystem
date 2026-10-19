@@ -18,11 +18,17 @@ import { can } from '@/lib/access';
 import { useSession } from '@/lib/auth-context';
 import { createSusuProduct, listSusuProducts, type ProductRow } from '@/lib/members-api';
 import { useAction } from '@/lib/use-action';
+import { useBusinesses } from '@/lib/use-businesses';
 import { useList } from '@/lib/use-list';
 
 const FREQUENCY_LABEL: Record<SusuFrequency, string> = { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly' };
 
-const columns: ColumnDef<ProductRow, unknown>[] = [
+const columns = (businessName: (id: string) => string): ColumnDef<ProductRow, unknown>[] => [
+  {
+    accessorKey: 'businessId',
+    header: 'Business',
+    cell: ({ getValue }) => <span className="text-[13px]">{businessName(String(getValue()))}</span>,
+  },
   {
     accessorKey: 'name',
     header: 'Product',
@@ -44,6 +50,8 @@ const columns: ColumnDef<ProductRow, unknown>[] = [
 
 function NewProductDialog() {
   const [open, setOpen] = useState(false);
+  const { businesses } = useBusinesses();
+  const [businessId, setBusinessId] = useState('');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [frequency, setFrequency] = useState<SusuFrequency>('DAILY');
@@ -51,7 +59,7 @@ function NewProductDialog() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const result = await action.run({ code, name, frequency });
+    const result = await action.run({ businessId, code, name, frequency });
     if (result) {
       toast.success(`${name.trim()} v${result.data.version} is live`, {
         description: result.data.version > 1 ? 'The previous version is retired. Existing accounts keep their version.' : undefined,
@@ -77,10 +85,27 @@ function NewProductDialog() {
       </DialogTrigger>
       <DialogContent
         title="New Susu product"
-        description="Reusing an existing code creates a new version and retires the old one for new accounts."
+        description="Reusing a code within the same business creates a new version and retires the old one for new accounts."
       >
         <form onSubmit={onSubmit} className="grid gap-4" noValidate>
           {action.error && !Object.keys(action.error.fieldErrors).length && <Alert tone="error">{action.error.message}</Alert>}
+          <Field
+            label="Business"
+            htmlFor="p-business"
+            hint="Accounts on this product, and the cash collected for them, belong to this business."
+            error={action.fieldError('businessId')}
+          >
+            <NativeSelect id="p-business" value={businessId} onChange={(e) => setBusinessId(e.target.value)}>
+              <option value="">Select a business</option>
+              {businesses
+                .filter((b) => b.status === 'ACTIVE')
+                .map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+            </NativeSelect>
+          </Field>
           <Field label="Code" htmlFor="p-code" hint="2–24 letters, digits or hyphens, e.g. DAILY" error={action.fieldError('code')}>
             <Input id="p-code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="font-mono uppercase" autoFocus />
           </Field>
@@ -114,16 +139,17 @@ function NewProductDialog() {
 export default function ProductsPage() {
   const { claims } = useSession();
   const { rows, loading, error } = useList(() => listSusuProducts().then((r) => r.products), []);
+  const { name: businessName } = useBusinesses();
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Susu products"
-        description="Products are versioned. Accounts stay on the version they were opened with."
+        title="Products"
+        description="Each business has its own products. Products are versioned; accounts stay on the version they were opened with."
         actions={can.createProduct(claims.role) && <NewProductDialog />}
       />
       <LoadError error={error} />
       <DataTable
-        columns={columns}
+        columns={columns(businessName)}
         data={rows}
         loading={loading}
         searchPlaceholder="Search products"

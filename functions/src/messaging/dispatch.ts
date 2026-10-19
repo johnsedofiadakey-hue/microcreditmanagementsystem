@@ -70,7 +70,12 @@ export async function dispatchSmsOutbox(
     const parsed = smsOutboxPayloadSchema.safeParse(typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload);
     const result = parsed.success
       ? await provider
-          .send({ to: parsed.data.to, text: renderSms(parsed.data, options.brand), reference: row.dedupe_key })
+          .send({
+            to: parsed.data.to,
+            text: renderSms(parsed.data, parsed.data.brand ?? options.brand),
+            reference: row.dedupe_key,
+            senderId: parsed.data.senderId,
+          })
           .catch((error: unknown) => ({ ok: false as const, permanent: false, error: error instanceof Error ? error.message : String(error) }))
       : ({ ok: false as const, permanent: true, error: `invalid payload: ${parsed.error.issues[0]?.message ?? 'unknown'}` });
 

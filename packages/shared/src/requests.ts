@@ -89,6 +89,8 @@ export const approveMemberRequestSchema = z.object({
 export type ApproveMemberRequest = z.infer<typeof approveMemberRequestSchema>;
 
 export const createSusuProductRequestSchema = z.object({
+  /** The business that offers it (ADR-001); its accounts and cash belong to that business. */
+  businessId: z.uuid(),
   code: z
     .string()
     .trim()

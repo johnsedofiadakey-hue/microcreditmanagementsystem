@@ -1,3 +1,4 @@
+import { BUSINESS_IDS } from '../src/db/migrations/006_businesses.js';
 import { generateKeyPairSync, randomUUID, sign, type KeyObject } from 'node:crypto';
 import { commandSigningString, type AuthClaims, type Role } from '@susu/shared';
 import { migrate } from '../src/db/migrate.js';
@@ -9,6 +10,11 @@ import { createAgentPair } from '../src/org/agentPairs.js';
 import { createBranch } from '../src/org/branches.js';
 import { bindDevice, type EnrollmentRecord } from '../src/org/devices.js';
 import { recordStaffUser } from '../src/org/staff.js';
+
+/** The seeded product's business: all existing Susu belongs to Gadufia Fiase Susu Services. */
+export const GADUFIA = BUSINESS_IDS.GADUFIA;
+export const STF = BUSINESS_IDS.STF;
+export const OPWS = BUSINESS_IDS.OPWS;
 
 export async function freshDatabase(): Promise<Database> {
   const db = await createPgliteDatabase();
@@ -79,12 +85,12 @@ export async function seedBranch(db: Database) {
   );
 
   const { productId } = await db.transaction((tx) =>
-    createSusuProduct(tx, admin, { code: 'DAILY', name: 'Daily Susu', frequency: 'DAILY' }),
+    createSusuProduct(tx, admin, { businessId: GADUFIA, code: 'DAILY', name: 'Daily Susu', frequency: 'DAILY' }),
   );
 
   const member = await addActiveMember(db, branchId, cashier, manager, productId);
 
-  return { admin, manager, cashier, branchId, agentPairId, deviceId, key, productId, ...member };
+  return { admin, manager, cashier, branchId, businessId: GADUFIA, agentPairId, deviceId, key, productId, ...member };
 }
 
 export async function addActiveMember(db: Database, branchId: string, maker: Actor, checker: Actor, productId: string) {

@@ -4,7 +4,7 @@ import type { Database } from '../src/db/types.js';
 import { findLedgerAccountId, getBalance } from '../src/ledger/accounts.js';
 import { createBranch } from '../src/org/branches.js';
 import { revokeDevice } from '../src/org/devices.js';
-import { addActiveMember, freshDatabase, phoneKey, randomUUID, seedBranch, signedCollection } from './helpers.js';
+import { addActiveMember, freshDatabase, phoneKey, randomUUID, seedBranch, signedCollection, GADUFIA } from './helpers.js';
 
 let db: Database;
 let seed: Awaited<ReturnType<typeof seedBranch>>;
@@ -19,12 +19,12 @@ afterEach(async () => {
 });
 
 async function memberBalance(susuAccountId: string) {
-  const id = await findLedgerAccountId(db, 'MEMBER_SUSU', susuAccountId);
+  const id = await findLedgerAccountId(db, 'MEMBER_SUSU', susuAccountId, GADUFIA);
   return getBalance(db, id!);
 }
 
 async function custodyBalance() {
-  const id = await findLedgerAccountId(db, 'AGENT_CASH_CUSTODY', seed.agentPairId);
+  const id = await findLedgerAccountId(db, 'AGENT_CASH_CUSTODY', seed.agentPairId, GADUFIA);
   return getBalance(db, id!);
 }
 

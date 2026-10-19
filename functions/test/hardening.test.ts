@@ -10,7 +10,7 @@ import { createBranch } from '../src/org/branches.js';
 import { bindDevice, describeEnrollment } from '../src/org/devices.js';
 import { assertStaffActive, createStaffUserFlow, recordStaffUser, type StaffAuth } from '../src/org/staff.js';
 import { DomainError } from '../src/lib/errors.js';
-import { actor, enrollment, freshDatabase, nextGhanaCard, phoneKey, randomUUID, seedBranch } from './helpers.js';
+import { actor, enrollment, freshDatabase, nextGhanaCard, phoneKey, randomUUID, seedBranch, GADUFIA } from './helpers.js';
 
 let db: Database;
 let seed: Awaited<ReturnType<typeof seedBranch>>;
@@ -20,8 +20,8 @@ let custody: string;
 beforeEach(async () => {
   db = await freshDatabase();
   seed = await seedBranch(db);
-  member = (await findLedgerAccountId(db, 'MEMBER_SUSU', seed.susuAccountId))!;
-  custody = (await findLedgerAccountId(db, 'AGENT_CASH_CUSTODY', seed.agentPairId))!;
+  member = (await findLedgerAccountId(db, 'MEMBER_SUSU', seed.susuAccountId, GADUFIA))!;
+  custody = (await findLedgerAccountId(db, 'AGENT_CASH_CUSTODY', seed.agentPairId, GADUFIA))!;
 });
 
 afterEach(async () => {
@@ -98,8 +98,8 @@ describe('M4 — balances follow the journal only', () => {
 
   it('refuses a balance row that does not start at zero', async () => {
     const account = await db.query<{ id: string }>(
-      `insert into ledger_accounts (kind, owner_id, name, account_type, normal_side) values ('MEMBER_SUSU', $1, 'x', 'LIABILITY', 'CREDIT') returning id`,
-      [randomUUID()],
+      `insert into ledger_accounts (kind, owner_id, business_id, name, account_type, normal_side) values ('MEMBER_SUSU', $1, $2, 'x', 'LIABILITY', 'CREDIT') returning id`,
+      [randomUUID(), GADUFIA],
     );
     await expect(
       db.query('insert into account_balances (account_id, balance_pesewas) values ($1, 100)', [account.rows[0]!.id]),

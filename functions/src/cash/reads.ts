@@ -1,19 +1,24 @@
-import type { BranchCloseChecklist, CaseKind, CaseSummary, HandoverSummary, WithdrawalStatus, WithdrawalSummary } from '@susu/shared';
+import type { BranchCashDay, BranchCloseChecklist, CaseKind, CaseSummary, HandoverSummary, WithdrawalStatus, WithdrawalSummary } from '@susu/shared';
 import type { Queryable } from '../db/types.js';
 import type { Actor } from '../lib/actor.js';
 import { requireBranch, requireRole } from '../lib/permissions.js';
 import { STAFF_READERS, branchScope } from '../reads/scope.js';
-import { branchCloseChecklist } from './close.js';
+import { branchCashDay, branchCloseChecklist } from './close.js';
 
 const LIMIT = 200;
 const iso = (d: Date | string | null): string | null => (d ? new Date(d).toISOString() : null);
 
 /** Newest first, scoped to the caller's branches (head office: all, or the one asked for). */
-export async function listHandovers(q: Queryable, actor: Actor, input: { branchId?: string; day?: string }): Promise<{ handovers: HandoverSummary[] }> {
+export async function listHandovers(
+  q: Queryable,
+  actor: Actor,
+  input: { branchId?: string; businessId?: string; day?: string },
+): Promise<{ handovers: HandoverSummary[] }> {
   const scope = branchScope(actor, input.branchId);
   const rows = await q.query<{
     id: string;
     branch_id: string;
+    business_id: string;
     agent_pair_id: string;
     agent_pair_name: string;
     day: string;
@@ -25,17 +30,19 @@ export async function listHandovers(q: Queryable, actor: Actor, input: { branchI
     case_id: string | null;
     batch_id: string;
   }>(
-    `select h.id, h.branch_id, h.agent_pair_id, p.name as agent_pair_name, to_char(h.day, 'YYYY-MM-DD') as day,
+    `select h.id, h.branch_id, h.business_id, h.agent_pair_id, p.name as agent_pair_name, to_char(h.day, 'YYYY-MM-DD') as day,
             h.expected_pesewas, h.counted_pesewas, h.received_by, h.received_at, h.note, h.case_id, h.batch_id
        from handovers h join agent_pairs p on p.id = h.agent_pair_id
       where ($1::uuid[] is null or h.branch_id = any($1::uuid[])) and ($2::date is null or h.day = $2::date)
+        and ($3::uuid is null or h.business_id = $3::uuid)
       order by h.received_at desc, h.id desc limit ${LIMIT}`,
-    [scope, input.day ?? null],
+    [scope, input.day ?? null, input.businessId ?? null],
   );
   return {
     handovers: rows.rows.map((r) => ({
       id: r.id,
       branchId: r.branch_id,
+      businessId: r.business_id,
       agentPairId: r.agent_pair_id,
       agentPairName: r.agent_pair_name,
       day: r.day,
@@ -54,12 +61,13 @@ export async function listHandovers(q: Queryable, actor: Actor, input: { branchI
 export async function listWithdrawals(
   q: Queryable,
   actor: Actor,
-  input: { branchId?: string; status?: WithdrawalStatus },
+  input: { branchId?: string; businessId?: string; status?: WithdrawalStatus },
 ): Promise<{ withdrawals: WithdrawalSummary[] }> {
   const scope = branchScope(actor, input.branchId);
   const rows = await q.query<{
     id: string;
     branch_id: string;
+    business_id: string;
     member_id: string;
     member_name: string;
     susu_account_id: string;
@@ -79,13 +87,15 @@ export async function listWithdrawals(
     `select w.*, m.full_name as member_name
        from withdrawal_requests w join members m on m.id = w.member_id
       where ($1::uuid[] is null or w.branch_id = any($1::uuid[])) and ($2::text is null or w.status = $2)
+        and ($3::uuid is null or w.business_id = $3::uuid)
       order by w.requested_at desc, w.id desc limit ${LIMIT}`,
-    [scope, input.status ?? null],
+    [scope, input.status ?? null, input.businessId ?? null],
   );
   return {
     withdrawals: rows.rows.map((r) => ({
       id: r.id,
       branchId: r.branch_id,
+      businessId: r.business_id,
       memberId: r.member_id,
       memberName: r.member_name,
       susuAccountId: r.susu_account_id,
@@ -105,11 +115,16 @@ export async function listWithdrawals(
   };
 }
 
-export async function listCases(q: Queryable, actor: Actor, input: { branchId?: string; status?: 'OPEN' | 'RESOLVED' }): Promise<{ cases: CaseSummary[] }> {
+export async function listCases(
+  q: Queryable,
+  actor: Actor,
+  input: { branchId?: string; businessId?: string; status?: 'OPEN' | 'RESOLVED' },
+): Promise<{ cases: CaseSummary[] }> {
   const scope = branchScope(actor, input.branchId);
   const rows = await q.query<{
     id: string;
     branch_id: string;
+    business_id: string;
     kind: CaseKind;
     status: 'OPEN' | 'RESOLVED';
     amount_pesewas: number;
@@ -124,13 +139,15 @@ export async function listCases(q: Queryable, actor: Actor, input: { branchId?: 
   }>(
     `select * from cases
       where ($1::uuid[] is null or branch_id = any($1::uuid[])) and ($2::text is null or status = $2)
+        and ($3::uuid is null or business_id = $3::uuid)
       order by opened_at desc, id desc limit ${LIMIT}`,
-    [scope, input.status ?? null],
+    [scope, input.status ?? null, input.businessId ?? null],
   );
   return {
     cases: rows.rows.map((r) => ({
       id: r.id,
       branchId: r.branch_id,
+      businessId: r.business_id,
       kind: r.kind,
       status: r.status,
       amountPesewas: r.amount_pesewas,
@@ -146,8 +163,19 @@ export async function listCases(q: Queryable, actor: Actor, input: { branchId?: 
   };
 }
 
-export async function getBranchClose(q: Queryable, actor: Actor, input: { branchId: string; day: string }): Promise<BranchCloseChecklist> {
+export async function getBranchClose(
+  q: Queryable,
+  actor: Actor,
+  input: { branchId: string; businessId: string; day: string },
+): Promise<BranchCloseChecklist> {
   requireRole(actor, STAFF_READERS);
   requireBranch(actor, input.branchId);
-  return branchCloseChecklist(q, input.branchId, input.day);
+  return branchCloseChecklist(q, input.branchId, input.businessId, input.day);
+}
+
+/** All three businesses' checklists for a branch day in one call. */
+export async function getBranchCashDay(q: Queryable, actor: Actor, input: { branchId: string; day: string }): Promise<BranchCashDay> {
+  requireRole(actor, STAFF_READERS);
+  requireBranch(actor, input.branchId);
+  return branchCashDay(q, input.branchId, input.day);
 }

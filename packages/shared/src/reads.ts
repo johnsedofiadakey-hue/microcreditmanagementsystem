@@ -33,6 +33,18 @@ export function maskGhanaCard(value: string): string {
 
 // ── Organisation ──
 
+/** The client's businesses (ADR-001). Every product, account and cash balance belongs to one. */
+export const listBusinessesRequestSchema = z.object({}).strict();
+export interface BusinessSummary {
+  id: string;
+  code: string;
+  name: string;
+  smsBrand: string;
+  smsSenderId: string;
+  address: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
 export const listBranchesRequestSchema = z.object({}).strict();
 export interface BranchSummary {
   id: string;
@@ -77,6 +89,7 @@ export interface DeviceSummary {
 export const listSusuProductsRequestSchema = z.object({}).strict();
 export interface ProductRow {
   id: string;
+  businessId: string;
   code: string;
   version: number;
   name: string;
@@ -112,6 +125,9 @@ export interface MemberRow {
 export const getMemberRequestSchema = z.object({ memberId: z.uuid() }).strict();
 export interface MemberAccount {
   id: string;
+  /** The business the account (and its money) belongs to. */
+  businessId: string;
+  businessName: string;
   productName: string;
   balancePesewas: number;
   status: 'ACTIVE' | 'FROZEN' | 'CLOSED';

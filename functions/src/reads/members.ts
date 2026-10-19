@@ -128,11 +128,15 @@ export async function getMember(
     agent_pair_id: string | null;
     agent_pair_name: string | null;
     expected_pesewas: string | number | null;
+    business_id: string;
+    business_name: string;
   }>(
     `select s.id, p.name as product_name, b.balance_pesewas, s.status,
-            r.agent_pair_id, ap.name as agent_pair_name, r.expected_pesewas
+            r.agent_pair_id, ap.name as agent_pair_name, r.expected_pesewas,
+            p.business_id, bz.name as business_name
        from susu_accounts s
        join susu_products p on p.id = s.product_id
+       join businesses bz on bz.id = p.business_id
        join account_balances b on b.account_id = s.ledger_account_id
        left join route_assignments r on r.susu_account_id = s.id
        left join agent_pairs ap on ap.id = r.agent_pair_id
@@ -162,6 +166,8 @@ export async function getMember(
       photoUrls: [],
       accounts: accounts.rows.map((a) => ({
         id: a.id,
+        businessId: a.business_id,
+        businessName: a.business_name,
         productName: a.product_name,
         balancePesewas: a.balance_pesewas,
         status: a.status,
@@ -190,10 +196,14 @@ export async function getAccountStatement(
     ledger_account_id: string;
     product_name: string;
     balance_pesewas: number;
+    business_id: string;
+    business_name: string;
   }>(
-    `select s.id, s.member_id, s.branch_id, s.status, s.ledger_account_id, p.name as product_name, b.balance_pesewas
+    `select s.id, s.member_id, s.branch_id, s.status, s.ledger_account_id, p.name as product_name, b.balance_pesewas,
+            p.business_id, bz.name as business_name
        from susu_accounts s
        join susu_products p on p.id = s.product_id
+       join businesses bz on bz.id = p.business_id
        join account_balances b on b.account_id = s.ledger_account_id
       where s.id = $1`,
     [input.susuAccountId],
@@ -236,6 +246,8 @@ export async function getAccountStatement(
     account: {
       id: account.id,
       memberId: account.member_id,
+      businessId: account.business_id,
+      businessName: account.business_name,
       productName: account.product_name,
       balancePesewas: account.balance_pesewas,
       status: account.status,

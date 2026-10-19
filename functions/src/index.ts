@@ -21,6 +21,7 @@ export {
   getAccountStatementFn as getAccountStatement,
   getMemberFn as getMember,
   listAgentPairsFn as listAgentPairs,
+  listBusinessesFn as listBusinesses,
   listAuditEventsFn as listAuditEvents,
   listBranchesFn as listBranches,
   listDevicesFn as listDevices,
@@ -32,6 +33,7 @@ export {
 export {
   approveWithdrawalFn as approveWithdrawal,
   closeBranchDayFn as closeBranchDay,
+  getBranchCashDayFn as getBranchCashDay,
   getBranchCloseFn as getBranchClose,
   listCasesFn as listCases,
   listHandoversFn as listHandovers,

@@ -1,6 +1,7 @@
 import {
   closeBranchDayRequestSchema,
   decideWithdrawalRequestSchema,
+  getBranchCashDayRequestSchema,
   getBranchCloseRequestSchema,
   listCasesRequestSchema,
   listHandoversRequestSchema,
@@ -15,7 +16,7 @@ import { logger } from 'firebase-functions';
 import { resolveCase } from '../cash/cases.js';
 import { closeBranchDay, submitBranchCount } from '../cash/close.js';
 import { recordHandover } from '../cash/handovers.js';
-import { getBranchClose, listCases, listHandovers, listWithdrawals } from '../cash/reads.js';
+import { getBranchCashDay, getBranchClose, listCases, listHandovers, listWithdrawals } from '../cash/reads.js';
 import { approveWithdrawal, payWithdrawal, rejectWithdrawal, requestWithdrawal } from '../cash/withdrawals.js';
 import { SMS_API_KEY, getDatabase } from '../runtime.js';
 import { sendSms } from '../triggers/sms.js';
@@ -56,6 +57,7 @@ export const listWithdrawalsFn = staffCallable(listWithdrawalsRequestSchema, ({ 
 
 // ── Branch close and cases ──
 export const getBranchCloseFn = staffCallable(getBranchCloseRequestSchema, ({ db, actor, input }) => getBranchClose(db, actor, input));
+export const getBranchCashDayFn = staffCallable(getBranchCashDayRequestSchema, ({ db, actor, input }) => getBranchCashDay(db, actor, input));
 export const submitBranchCountFn = staffCallable(submitBranchCountRequestSchema, ({ db, actor, input }) =>
   db.transaction((tx) => submitBranchCount(tx, actor, input)),
 );

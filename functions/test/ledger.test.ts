@@ -4,7 +4,7 @@ import { ensureLedgerAccount, getBalance } from '../src/ledger/accounts.js';
 import { postJournal, type PostingRequest } from '../src/ledger/post.js';
 import { reverseJournalBatch } from '../src/ledger/reverse.js';
 import { DomainError } from '../src/lib/errors.js';
-import { actor, freshDatabase } from './helpers.js';
+import { actor, freshDatabase, GADUFIA } from './helpers.js';
 import { createBranch } from '../src/org/branches.js';
 
 let db: Database;
@@ -23,12 +23,14 @@ beforeEach(async () => {
       kind: 'AGENT_CASH_CUSTODY',
       ownerId: '11111111-1111-4111-8111-111111111111',
       branchId,
+      businessId: GADUFIA,
       name: 'Pair custody',
     });
     member = await ensureLedgerAccount(tx, {
       kind: 'MEMBER_SUSU',
       ownerId: '22222222-2222-4222-8222-222222222222',
       branchId,
+      businessId: GADUFIA,
       name: 'Member',
     });
     branchCash = (await tx.query<{ id: string }>(

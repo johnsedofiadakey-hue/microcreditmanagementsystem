@@ -1,6 +1,6 @@
 import type { CreateAgentPairRequest } from '@susu/shared';
 import type { Queryable } from '../db/types.js';
-import { ensureLedgerAccount } from '../ledger/accounts.js';
+import { activeBusinessIds, ensureCashAccount } from '../ledger/accounts.js';
 import type { Actor } from '../lib/actor.js';
 import { writeAudit } from '../lib/audit.js';
 import { DomainError } from '../lib/errors.js';
@@ -48,12 +48,10 @@ export async function createAgentPair(
     agentPairId,
   ]);
 
-  await ensureLedgerAccount(tx, {
-    kind: 'AGENT_CASH_CUSTODY',
-    ownerId: agentPairId,
-    branchId: input.branchId,
-    name: `${input.name} cash custody`,
-  });
+  // One custody balance per business: a pair can carry Susu and welfare cash, never mixed (ADR-001).
+  for (const businessId of await activeBusinessIds(tx)) {
+    await ensureCashAccount(tx, 'AGENT_CASH_CUSTODY', agentPairId, businessId);
+  }
 
   await writeAudit(tx, {
     actorUid: actor.uid,

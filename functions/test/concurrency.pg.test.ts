@@ -10,11 +10,10 @@ import { closeBranchDay, submitBranchCount } from '../src/cash/close.js';
 import { today } from '../src/cash/common.js';
 import { recordHandover } from '../src/cash/handovers.js';
 import { approveWithdrawal, payWithdrawal, requestWithdrawal } from '../src/cash/withdrawals.js';
-import { actor } from './helpers.js';
 import type { SmsMessage, SmsProvider } from '../src/messaging/providers.js';
 import { createAgentPair } from '../src/org/agentPairs.js';
 import { recordStaffUser } from '../src/org/staff.js';
-import { seedBranch, signedCollection } from './helpers.js';
+import { GADUFIA, actor, seedBranch, signedCollection } from './helpers.js';
 
 /**
  * Runs only with TEST_DATABASE_URL pointing at a disposable Postgres database (it drops the public schema).
@@ -45,8 +44,8 @@ describe.skipIf(!url)('real Postgres under concurrency', () => {
     // With the per-device lock, racing duplicates resolve as replays: no retryable errors at all.
     expect(results.every((r) => r.status === 'POSTED')).toBe(true);
 
-    const custody = await findLedgerAccountId(db, 'AGENT_CASH_CUSTODY', seed.agentPairId);
-    const member = await findLedgerAccountId(db, 'MEMBER_SUSU', seed.susuAccountId);
+    const custody = await findLedgerAccountId(db, 'AGENT_CASH_CUSTODY', seed.agentPairId, GADUFIA);
+    const member = await findLedgerAccountId(db, 'MEMBER_SUSU', seed.susuAccountId, GADUFIA);
     expect(await getBalance(db, custody!)).toBe(50_000);
     expect(await getBalance(db, member!)).toBe(50_000);
     expect((await db.query('select 1 from collections')).rowCount).toBe(50);
@@ -89,9 +88,9 @@ describe.skipIf(!url)('real Postgres under concurrency', () => {
   });
 
   it('cash day races: one payout per withdrawal, and a payout never slips past a close', async () => {
-    const custodyId = await findLedgerAccountId(db, 'AGENT_CASH_CUSTODY', seed.agentPairId);
+    const custodyId = await findLedgerAccountId(db, 'AGENT_CASH_CUSTODY', seed.agentPairId, GADUFIA);
     const expected = await getBalance(db, custodyId!);
-    await db.transaction((tx) => recordHandover(tx, seed.cashier, { agentPairId: seed.agentPairId, expectedPesewas: expected, countedPesewas: expected }));
+    await db.transaction((tx) => recordHandover(tx, seed.cashier, { agentPairId: seed.agentPairId, businessId: GADUFIA, expectedPesewas: expected, countedPesewas: expected }));
     const cashier2 = actor('cashier-2', 'CASHIER', [seed.branchId]);
     const manager2 = actor('manager-2', 'BRANCH_MANAGER', [seed.branchId]);
 
@@ -106,11 +105,11 @@ describe.skipIf(!url)('real Postgres under concurrency', () => {
 
     const second = await db.transaction((tx) => requestWithdrawal(tx, seed.cashier, { susuAccountId: seed.susuAccountId, amountPesewas: 2_000, reason: 'race' }));
     await db.transaction((tx) => approveWithdrawal(tx, seed.manager, { withdrawalId: second.withdrawalId }));
-    const branchCashId = await findLedgerAccountId(db, 'BRANCH_CASH', seed.branchId);
+    const branchCashId = await findLedgerAccountId(db, 'BRANCH_CASH', seed.branchId, GADUFIA);
     const vault = await getBalance(db, branchCashId!);
-    await db.transaction((tx) => submitBranchCount(tx, seed.cashier, { branchId: seed.branchId, day: today(), countedPesewas: vault }));
+    await db.transaction((tx) => submitBranchCount(tx, seed.cashier, { branchId: seed.branchId, businessId: GADUFIA, day: today(), countedPesewas: vault }));
     const raced = await Promise.allSettled([
-      db.transaction((tx) => closeBranchDay(tx, manager2, { branchId: seed.branchId, day: today() })),
+      db.transaction((tx) => closeBranchDay(tx, manager2, { branchId: seed.branchId, businessId: GADUFIA, day: today() })),
       db.transaction((tx) => payWithdrawal(tx, cashier2, { withdrawalId: second.withdrawalId })),
     ]);
     const [closeResult, payResult] = raced;

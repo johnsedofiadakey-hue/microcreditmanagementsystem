@@ -21,6 +21,9 @@ const receiptValues = z.object({
 export const smsOutboxPayloadSchema = z.object({
   to: z.string().regex(/^\+233\d{9}$/),
   template: z.enum(['COLLECTION_RECEIPT', 'WITHDRAWAL_RECEIPT']),
+  /** The business's name on the receipt and its registered sender ID (ADR-001). Older rows have neither. */
+  brand: z.string().max(40).optional(),
+  senderId: z.string().regex(/^[A-Za-z0-9 ]{1,11}$/).optional(),
   values: receiptValues,
 });
 export type SmsOutboxPayload = z.infer<typeof smsOutboxPayloadSchema>;

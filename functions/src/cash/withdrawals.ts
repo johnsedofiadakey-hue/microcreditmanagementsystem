@@ -13,7 +13,7 @@ import type { Actor } from '../lib/actor.js';
 import { writeAudit } from '../lib/audit.js';
 import { DomainError } from '../lib/errors.js';
 import { requireBranch, requireRole } from '../lib/permissions.js';
-import { assertDayOpen, lockBranch, lockedBalance, requireLedgerAccount, today } from './common.js';
+import { assertDayOpen, cashAccount, lockBranch, lockedBalance, today } from './common.js';
 
 /** Start a withdrawal for a member (the maker). Starting it moves no money. */
 export const WITHDRAWAL_MAKERS: readonly Role[] = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'];
@@ -25,6 +25,9 @@ export const WITHDRAWAL_PAYERS: readonly Role[] = ['CASHIER', 'BRANCH_MANAGER'];
 
 interface LockedAccount {
   branch_id: string;
+  business_id: string;
+  sms_brand: string;
+  sms_sender_id: string;
   member_id: string;
   status: string;
   member_status: string;
@@ -35,8 +38,12 @@ interface LockedAccount {
 
 async function lockAccount(tx: Queryable, susuAccountId: string): Promise<LockedAccount> {
   const result = await tx.query<LockedAccount>(
-    `select s.branch_id, s.member_id, s.status, s.ledger_account_id, m.status as member_status, m.full_name, m.phone
-       from susu_accounts s join members m on m.id = s.member_id
+    `select s.branch_id, s.member_id, s.status, s.ledger_account_id, m.status as member_status, m.full_name, m.phone,
+            p.business_id, b.sms_brand, b.sms_sender_id
+       from susu_accounts s
+       join members m on m.id = s.member_id
+       join susu_products p on p.id = s.product_id
+       join businesses b on b.id = p.business_id
       where s.id = $1
       for update of s`,
     [susuAccountId],
@@ -66,6 +73,7 @@ async function availablePesewas(tx: Queryable, account: LockedAccount, susuAccou
 interface LockedRequest {
   id: string;
   branch_id: string;
+  business_id: string;
   susu_account_id: string;
   amount_pesewas: number;
   needs_head_office: boolean;
@@ -76,7 +84,7 @@ interface LockedRequest {
 
 async function lockRequest(tx: Queryable, withdrawalId: string): Promise<LockedRequest> {
   const result = await tx.query<LockedRequest>(
-    `select id, branch_id, susu_account_id, amount_pesewas, needs_head_office, status, requested_by, decided_by
+    `select id, branch_id, business_id, susu_account_id, amount_pesewas, needs_head_office, status, requested_by, decided_by
        from withdrawal_requests where id = $1 for update`,
     [withdrawalId],
   );
@@ -104,9 +112,9 @@ export async function requestWithdrawal(
 
   const needsHeadOffice = input.amountPesewas > WITHDRAWAL_HEAD_OFFICE_THRESHOLD_PESEWAS;
   const created = await tx.query<{ id: string }>(
-    `insert into withdrawal_requests (branch_id, member_id, susu_account_id, amount_pesewas, reason, needs_head_office, requested_by)
-     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-    [account.branch_id, account.member_id, input.susuAccountId, input.amountPesewas, input.reason, needsHeadOffice, actor.uid],
+    `insert into withdrawal_requests (branch_id, business_id, member_id, susu_account_id, amount_pesewas, reason, needs_head_office, requested_by)
+     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+    [account.branch_id, account.business_id, account.member_id, input.susuAccountId, input.amountPesewas, input.reason, needsHeadOffice, actor.uid],
   );
   const withdrawalId = created.rows[0]!.id;
   await writeAudit(tx, {
@@ -192,7 +200,7 @@ export async function rejectWithdrawal(tx: Queryable, actor: Actor, input: Rejec
 }
 
 /**
- * The cashier pays an approved withdrawal from branch cash:
+ * The cashier pays an approved withdrawal from the vault of the account's business:
  *   Debit  MEMBER_SUSU  (we owe the member less)
  *   Credit BRANCH_CASH  (the vault holds less)
  * The batch records the payer as actor and the approver as approved_by (database: different people).
@@ -213,10 +221,10 @@ export async function payWithdrawal(
   }
 
   await lockBranch(tx, request.branch_id);
-  await assertDayOpen(tx, request.branch_id, today(now));
+  await assertDayOpen(tx, request.branch_id, request.business_id, today(now));
   const account = await lockAccount(tx, request.susu_account_id);
   assertPayable(account);
-  const branchCashId = await requireLedgerAccount(tx, 'BRANCH_CASH', request.branch_id);
+  const branchCashId = await cashAccount(tx, 'BRANCH_CASH', request.branch_id, request.business_id);
 
   const posting = await postJournal(tx, {
     idempotencyKey: `withdrawal:${request.id}`,
@@ -246,6 +254,8 @@ export async function payWithdrawal(
     JSON.stringify({
       to: account.phone,
       template: 'WITHDRAWAL_RECEIPT',
+      brand: account.sms_brand,
+      senderId: account.sms_sender_id,
       values: {
         amount: formatCedis(request.amount_pesewas),
         balance: formatCedis(balance.rows[0]!.balance_pesewas),

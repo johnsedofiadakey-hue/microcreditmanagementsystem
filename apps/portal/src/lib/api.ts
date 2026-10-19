@@ -5,6 +5,7 @@ import type {
   AuditEventSummary,
   BindDeviceRequest,
   BranchSummary,
+  BusinessSummary,
   CreateAgentPairRequest,
   CreateBranchRequest,
   CreateStaffUserRequest,
@@ -17,7 +18,7 @@ import { httpsCallable } from 'firebase/functions';
 import { dataChanged } from './data-events';
 import { firebase } from './firebase';
 
-export type { AgentPairSummary, AuditEventSummary, BranchSummary, DeviceSummary, StaffSummary } from '@susu/shared';
+export type { AgentPairSummary, AuditEventSummary, BranchSummary, BusinessSummary, DeviceSummary, StaffSummary } from '@susu/shared';
 
 /** Every backend call the portal makes for the organisation and audit screens (API.md §2). */
 
@@ -77,6 +78,11 @@ export async function revokeDevice(input: RevokeDeviceRequest) {
 }
 
 // ── Reads (scoped to the caller's branches on the server) ─────────────────────
+
+/** The client's three businesses (ADR-001): every product, account and cash balance belongs to one. */
+export async function listBusinesses(): Promise<{ businesses: BusinessSummary[] }> {
+  return call('listBusinesses', {});
+}
 
 export async function listBranches(): Promise<{ branches: BranchSummary[] }> {
   return call('listBranches', {});

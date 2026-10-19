@@ -62,7 +62,7 @@ describe('organisation lists are scoped to the caller’s branches', () => {
 
   it('listSusuProducts', async () => {
     expect((await listSusuProducts(db, seed.cashier)).products).toEqual([
-      { id: seed.productId, code: 'DAILY', version: 1, name: 'Daily Susu', frequency: 'DAILY', status: 'ACTIVE' },
+      { id: seed.productId, businessId: seed.businessId, code: 'DAILY', version: 1, name: 'Daily Susu', frequency: 'DAILY', status: 'ACTIVE' },
     ]);
   });
 });
@@ -143,7 +143,17 @@ describe('getMember', () => {
       photoCount: 0,
       photoUrls: [],
     });
-    expect(profile.accounts).toEqual([{ id: seed.susuAccountId, productName: 'Daily Susu', balancePesewas: 2_500, status: 'ACTIVE', collector: null }]);
+    expect(profile.accounts).toEqual([
+      {
+        id: seed.susuAccountId,
+        businessId: seed.businessId,
+        businessName: 'Gadufia Fiase Susu Services',
+        productName: 'Daily Susu',
+        balancePesewas: 2_500,
+        status: 'ACTIVE',
+        collector: null,
+      },
+    ]);
   });
 
   it('full Ghana Card and photos only for SUPER_ADMIN, COMPLIANCE, or that branch’s manager', async () => {
@@ -185,6 +195,8 @@ describe('getAccountStatement', () => {
     }
     const first = await getAccountStatement(db, seed.cashier, { susuAccountId: seed.susuAccountId, limit: 2 });
     expect(first.account).toEqual({
+      businessId: seed.businessId,
+      businessName: 'Gadufia Fiase Susu Services',
       id: seed.susuAccountId,
       memberId: seed.memberId,
       productName: 'Daily Susu',

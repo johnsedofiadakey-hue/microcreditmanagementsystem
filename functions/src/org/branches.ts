@@ -1,6 +1,6 @@
 import type { CreateBranchRequest } from '@susu/shared';
 import type { Queryable } from '../db/types.js';
-import { ensureLedgerAccount } from '../ledger/accounts.js';
+import { activeBusinessIds, ensureCashAccount } from '../ledger/accounts.js';
 import type { Actor } from '../lib/actor.js';
 import { writeAudit } from '../lib/audit.js';
 import { DomainError } from '../lib/errors.js';
@@ -18,13 +18,11 @@ export async function createBranch(tx: Queryable, actor: Actor, input: CreateBra
   );
   const branchId = created.rows[0]!.id;
 
-  await ensureLedgerAccount(tx, { kind: 'BRANCH_CASH', ownerId: branchId, branchId, name: `${input.name} cash` });
-  await ensureLedgerAccount(tx, {
-    kind: 'BRANCH_CASH_VARIANCE',
-    ownerId: branchId,
-    branchId,
-    name: `${input.name} cash variance`,
-  });
+  // A vault and a variance account per business: their cash is never mixed (ADR-001).
+  for (const businessId of await activeBusinessIds(tx)) {
+    await ensureCashAccount(tx, 'BRANCH_CASH', branchId, businessId);
+    await ensureCashAccount(tx, 'BRANCH_CASH_VARIANCE', branchId, businessId);
+  }
 
   await writeAudit(tx, {
     actorUid: actor.uid,

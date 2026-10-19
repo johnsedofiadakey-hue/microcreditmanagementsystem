@@ -202,7 +202,7 @@ export default function OverviewPage() {
 const SHORTCUT_COPY: Record<string, string> = {
   '/members': 'Register, search and review members',
   '/approvals': 'Requests waiting for a second person',
-  '/admin/products': 'Susu products and versions',
+  '/admin/products': 'Products and versions for each business',
   '/admin/branches': 'Branches and their codes',
   '/admin/staff': 'People, roles and branch access',
   '/admin/agent-pairs': 'Pair agents for field work',

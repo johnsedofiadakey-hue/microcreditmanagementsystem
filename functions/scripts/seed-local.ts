@@ -62,12 +62,13 @@ try {
   // Demo branch and product through the real services, so ledger accounts and audit rows exist.
   const { createBranch } = await import('../src/org/branches.js');
   const { createSusuProduct } = await import('../src/members/members.js');
+  const { BUSINESS_IDS } = await import('../src/db/migrations/006_businesses.js');
   const actor = { uid: user.uid, claims: { role: 'SUPER_ADMIN' as const, branchIds: [] }, channel: 'SYSTEM' as const };
   const hasBranch = (await db.query('select 1 from branches where code = $1', ['KSI-01'])).rowCount > 0;
   if (!hasBranch) {
     await db.transaction((tx) => createBranch(tx, actor, { name: 'Kumasi Central', code: 'KSI-01' }));
-    await db.transaction((tx) => createSusuProduct(tx, actor, { code: 'DAILY', name: 'Daily Susu', frequency: 'DAILY' }));
-    console.log('Demo branch KSI-01 and product DAILY created.');
+    await db.transaction((tx) => createSusuProduct(tx, actor, { businessId: BUSINESS_IDS.GADUFIA, code: 'DAILY', name: 'Daily Susu', frequency: 'DAILY' }));
+    console.log('Demo branch KSI-01 and Gadufia product DAILY created.');
   }
 } finally {
   await db.close();

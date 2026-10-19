@@ -1,6 +1,6 @@
 # Susu Platform — Project Instructions
 
-Microfinance and Susu management platform for a Ghanaian client, built by Stormglide.
+Microfinance and Susu management platform for a Ghanaian client, built by Stormglide. The client runs **three businesses on this one platform** — Gadufia Fiase Susu Services, STF Micro-Credit Services and Opportunity People's Welfare Scheme International Association — with shared member profiles and each business's money kept apart (`docs/architecture/ADR-001-three-businesses.md`).
 Read `BUILD_PLAN.md` first — it is the agreed architecture and build order.
 
 ## Work is split between two owners

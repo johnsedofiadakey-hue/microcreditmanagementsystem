@@ -5,14 +5,15 @@ import type { Actor } from '../lib/actor.js';
 import { writeAudit } from '../lib/audit.js';
 import { DomainError } from '../lib/errors.js';
 import { requireBranch, requireRole } from '../lib/permissions.js';
-import { assertDayOpen, describeDifference, lockBranch, lockedBalance, newId, openCase, requireLedgerAccount, today } from './common.js';
+import { assertDayOpen, cashAccount, describeDifference, lockBranch, lockedBalance, newId, openCase, requireBusiness, today } from './common.js';
 
 /** Who receives cash from agents. */
 export const HANDOVER_RECEIVERS: readonly Role[] = ['CASHIER', 'BRANCH_MANAGER'];
 
 /**
- * The cashier counts an agent pair's cash. One balanced batch moves it out of the pair's custody into
- * branch cash; any difference goes to BRANCH_CASH_VARIANCE and opens a case:
+ * The cashier counts an agent pair's cash for one business. One balanced batch, all in that business,
+ * moves it out of the pair's custody into the branch vault; any difference goes to
+ * BRANCH_CASH_VARIANCE and opens a case:
  *
  *   Debit  BRANCH_CASH            counted
  *   Credit AGENT_CASH_CUSTODY     expected (everything posted and not yet handed over)
@@ -33,21 +34,22 @@ export async function recordHandover(
   ).rows[0];
   if (!pair) throw new DomainError('NOT_FOUND', 'Agent pair not found');
   requireBranch(actor, pair.branch_id);
+  const business = await requireBusiness(tx, input.businessId);
 
   await lockBranch(tx, pair.branch_id);
   const day = today(now);
-  await assertDayOpen(tx, pair.branch_id, day);
+  await assertDayOpen(tx, pair.branch_id, business.id, day);
 
-  const custodyId = await requireLedgerAccount(tx, 'AGENT_CASH_CUSTODY', input.agentPairId);
-  const branchCashId = await requireLedgerAccount(tx, 'BRANCH_CASH', pair.branch_id);
-  const varianceId = await requireLedgerAccount(tx, 'BRANCH_CASH_VARIANCE', pair.branch_id);
+  const custodyId = await cashAccount(tx, 'AGENT_CASH_CUSTODY', input.agentPairId, business.id);
+  const branchCashId = await cashAccount(tx, 'BRANCH_CASH', pair.branch_id, business.id);
+  const varianceId = await cashAccount(tx, 'BRANCH_CASH_VARIANCE', pair.branch_id, business.id);
 
   const expected = await lockedBalance(tx, custodyId);
   if (expected !== input.expectedPesewas) {
     throw new DomainError('EXPECTED_CASH_CHANGED', `Expected cash is now ${formatCedis(expected)}`, { expectedPesewas: expected });
   }
   if (expected === 0 && input.countedPesewas === 0) {
-    throw new DomainError('INVALID_COMMAND', 'This pair has no cash to hand over');
+    throw new DomainError('INVALID_COMMAND', `This pair has no ${business.name} cash to hand over`);
   }
 
   const counted = input.countedPesewas;
@@ -62,7 +64,7 @@ export async function recordHandover(
   const posting = await postJournal(tx, {
     idempotencyKey: `handover:${handoverId}`,
     kind: 'CASH_HANDOVER',
-    description: `Cash handover from ${pair.name}`,
+    description: `Cash handover from ${pair.name} · ${business.code}`,
     branchId: pair.branch_id,
     actorUid: actor.uid,
     channel: actor.channel,
@@ -74,18 +76,19 @@ export async function recordHandover(
       ? null
       : await openCase(tx, {
           branchId: pair.branch_id,
+          businessId: business.id,
           kind: 'HANDOVER_DIFFERENCE',
           amountPesewas: difference,
-          summary: `Handover from ${pair.name}: ${describeDifference(difference)} (expected ${formatCedis(expected)}, counted ${formatCedis(counted)})`,
+          summary: `${business.code} handover from ${pair.name}: ${describeDifference(difference)} (expected ${formatCedis(expected)}, counted ${formatCedis(counted)})`,
           entityKind: 'handover',
           entityId: handoverId,
           openedBy: actor.uid,
         });
 
   await tx.query(
-    `insert into handovers (id, branch_id, agent_pair_id, day, expected_pesewas, counted_pesewas, received_by, note, case_id, batch_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-    [handoverId, pair.branch_id, input.agentPairId, day, expected, counted, actor.uid, input.note ?? null, caseId, posting.batchId],
+    `insert into handovers (id, branch_id, business_id, agent_pair_id, day, expected_pesewas, counted_pesewas, received_by, note, case_id, batch_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [handoverId, pair.branch_id, business.id, input.agentPairId, day, expected, counted, actor.uid, input.note ?? null, caseId, posting.batchId],
   );
   await writeAudit(tx, {
     actorUid: actor.uid,
@@ -94,7 +97,7 @@ export async function recordHandover(
     entityId: handoverId,
     branchId: pair.branch_id,
     channel: actor.channel,
-    data: { agentPairId: input.agentPairId, expectedPesewas: expected, countedPesewas: counted, differencePesewas: difference, caseId },
+    data: { agentPairId: input.agentPairId, businessId: business.id, expectedPesewas: expected, countedPesewas: counted, differencePesewas: difference, caseId },
   });
   return { handoverId, differencePesewas: difference, caseId };
 }

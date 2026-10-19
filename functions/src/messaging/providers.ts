@@ -12,6 +12,8 @@ export interface SmsMessage {
   text: string;
   /** Our outbox dedupe key, passed to providers that accept a client reference. */
   reference: string;
+  /** The business's registered sender ID; the provider's default (SMS_SENDER_ID) when absent. */
+  senderId?: string;
 }
 
 /** Provider-neutral adapter (BUILD_PLAN §4). One implementation per SMS/USSD aggregator. */
@@ -68,7 +70,7 @@ export class ArkeselSmsProvider implements SmsProvider {
       response = await this.fetchImpl(`${this.baseUrl}/api/v2/sms/send`, {
         method: 'POST',
         headers: { 'api-key': this.apiKey, 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ sender: this.senderId, message: message.text, recipients: [message.to.replace(/^\+/, '')] }),
+        body: JSON.stringify({ sender: message.senderId ?? this.senderId, message: message.text, recipients: [message.to.replace(/^\+/, '')] }),
         signal: AbortSignal.timeout(15_000),
       });
     } catch (error) {

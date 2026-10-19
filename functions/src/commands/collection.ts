@@ -1,6 +1,6 @@
 import { formatCedis, type CollectionCommand } from '@susu/shared';
 import type { Queryable } from '../db/types.js';
-import { findLedgerAccountId } from '../ledger/accounts.js';
+import { ensureCashAccount } from '../ledger/accounts.js';
 import { postJournal } from '../ledger/post.js';
 import { writeAudit } from '../lib/audit.js';
 import { DomainError } from '../lib/errors.js';
@@ -13,7 +13,7 @@ export interface CollectionPosted {
 
 /**
  * A member paid cash to an agent pair.
- *   Debit  AGENT_CASH_CUSTODY (the pair now holds the cash)
+ *   Debit  AGENT_CASH_CUSTODY (the pair now holds the cash — its custody for the account's business)
  *   Credit MEMBER_SUSU        (the company now owes the member)
  * Runs inside the caller's transaction together with the command record, audit and SMS outbox.
  */
@@ -33,9 +33,16 @@ export async function postCollection(
     member_status: string;
     phone: string;
     full_name: string;
+    business_id: string;
+    sms_brand: string;
+    sms_sender_id: string;
   }>(
-    `select s.member_id, s.branch_id, s.status, s.ledger_account_id, m.status as member_status, m.phone, m.full_name
-       from susu_accounts s join members m on m.id = s.member_id
+    `select s.member_id, s.branch_id, s.status, s.ledger_account_id, m.status as member_status, m.phone, m.full_name,
+            p.business_id, b.sms_brand, b.sms_sender_id
+       from susu_accounts s
+       join members m on m.id = s.member_id
+       join susu_products p on p.id = s.product_id
+       join businesses b on b.id = p.business_id
       where s.id = $1`,
     [susuAccountId],
   );
@@ -52,8 +59,8 @@ export async function postCollection(
   }
   if (account.status !== 'ACTIVE') throw new DomainError('ACCOUNT_NOT_ACTIVE', `Susu account is ${account.status}`);
 
-  const custodyAccountId = await findLedgerAccountId(tx, 'AGENT_CASH_CUSTODY', device.agentPairId);
-  if (!custodyAccountId) throw new Error(`Agent pair ${device.agentPairId} has no custody account`);
+  // The pair's custody for this account's business: each business's cash is tracked apart (ADR-001).
+  const custodyAccountId = await ensureCashAccount(tx, 'AGENT_CASH_CUSTODY', device.agentPairId, account.business_id);
 
   const posting = await postJournal(tx, {
     idempotencyKey: `cmd:${commandId}`,
@@ -99,6 +106,8 @@ export async function postCollection(
       JSON.stringify({
         to: account.phone,
         template: 'COLLECTION_RECEIPT',
+        brand: account.sms_brand,
+        senderId: account.sms_sender_id,
         values: {
           amount: formatCedis(amountPesewas),
           balance: formatCedis(balance.rows[0]!.balance_pesewas),
