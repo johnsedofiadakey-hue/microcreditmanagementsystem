@@ -1,0 +1,85 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #f7f8f6;
+  --surface: #ffffff;
+  --foreground: #12201b;
+  --muted: #eef1ee;
+  --muted-foreground: #5b6a63;
+  --border: #e2e7e3;
+  --input: #d5dcd7;
+  --ring: #0d7a5f;
+
+  --primary: #0d7a5f;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e3f3ed;
+  --accent: #e9a90c;
+  --accent-soft: #fdf3d6;
+
+  --success: #11734f;
+  --success-soft: #e4f4ec;
+  --warning: #8f5a00;
+  --warning-soft: #fdf1d8;
+  --destructive: #c42d2d;
+  --destructive-soft: #fcebeb;
+  --info: #1f5fbf;
+  --info-soft: #e7effb;
+
+  --sidebar: #0f1d18;
+  --sidebar-foreground: #d7e2dc;
+  --sidebar-muted: #8ea39a;
+  --sidebar-active: #1b2f28;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-active: var(--sidebar-active);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Satoshi', var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+/* Money: right-aligned, tabular figures, never wraps. */
+.money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
