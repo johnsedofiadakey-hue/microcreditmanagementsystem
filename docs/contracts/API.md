@@ -123,7 +123,7 @@ Attestation chains are stored for verification in a later step; Play Integrity A
 
 | `status` | Extra fields | Show the agent |
 |---|---|---|
-| *(absent)* | — | `Pending sync` (also when `snapshot.metadata.hasPendingWrites`) |
+| *(absent)* | — | `Pending sync` (also when `snapshot.metadata.hasPendingWrites`). If the server never processes it (a lost trigger), the 15-minute sweeper picks it up after 10 minutes (**19 Oct**) |
 | `POSTED` | `postingId`, `serverTime`, `processedAt` | `Synced ✓` and receipt reference = first 8 chars of `postingId`, upper-case |
 | `REJECTED` | `reason`, `message`, `serverTime`, `processedAt` | The `message`, plus guidance by `reason` (below) |
 | `FAILED` | `message`, `serverTime`, `processedAt` | **changed 19 Oct:** "Not processed yet. It will be retried automatically — do not enter it again." A sweeper retries every 15 minutes and later sets `POSTED` or `REJECTED` on the same document |

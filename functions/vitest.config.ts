@@ -8,7 +8,7 @@ export default defineConfig({
   },
   test: {
     include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
-    exclude: ['test/rules/**'],
+    exclude: ['test/rules/**', 'test/emulator/**'],
     testTimeout: 30_000,
   },
 });

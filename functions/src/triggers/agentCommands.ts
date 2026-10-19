@@ -1,8 +1,10 @@
+import type { CommandResult } from '@susu/shared';
 import { FieldValue, getFirestore, type DocumentReference } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { processAgentCommand } from '../commands/processAgentCommand.js';
+import { findUnprocessedCommands } from '../commands/unprocessed.js';
 import { publishSyncHealth } from '../projections/firestore.js';
 import { DATABASE_URL, REGION, SMS_API_KEY, getDatabase } from '../runtime.js';
 import { sendSms } from './sms.js';
@@ -25,12 +27,8 @@ export const onAgentCommandCreated = onDocumentCreated(
     const commandId = event.params.commandId;
 
     try {
-      const result = await processAgentCommand(getDatabase(), commandId, snapshot.data());
-      await snapshot.ref.update({ ...result, processedAt: FieldValue.serverTimestamp() });
-      logger.info('Agent command processed', { commandId, status: result.status });
-      const deviceId = snapshot.data()?.deviceId;
-      if (typeof deviceId === 'string') await publishSyncHealth(getDatabase(), deviceId);
-      if (result.status === 'POSTED') await sendReceiptNow(commandId);
+      const status = await processAndRecord(snapshot.ref, commandId, snapshot.data());
+      logger.info('Agent command processed', { commandId, status });
     } catch (error) {
       const age = Date.now() - Date.parse(event.time);
       if (age > MAX_RETRY_AGE_MS) {
@@ -42,6 +40,23 @@ export const onAgentCommandCreated = onDocumentCreated(
     }
   },
 );
+
+/**
+ * Post (or reject) a command, write the result onto its document for the agent, refresh the pair's
+ * sync health and send the receipt. Shared by the trigger and the sweep for lost triggers.
+ */
+async function processAndRecord(
+  ref: DocumentReference,
+  commandId: string,
+  data: Record<string, unknown> | undefined,
+): Promise<CommandResult['status']> {
+  const result = await processAgentCommand(getDatabase(), commandId, data);
+  await ref.update({ ...result, processedAt: FieldValue.serverTimestamp() });
+  const deviceId = data?.deviceId;
+  if (typeof deviceId === 'string') await publishSyncHealth(getDatabase(), deviceId);
+  if (result.status === 'POSTED') await sendReceiptNow(commandId);
+  return result.status;
+}
 
 /**
  * Send the member's receipt straight away instead of waiting for the sweep. Any failure is only
@@ -96,10 +111,14 @@ async function markFailed(
   await batch.commit();
 }
 
-/** Every 15 minutes, try FAILED commands again. Safe because processing is idempotent per command ID. */
+/**
+ * Every 15 minutes: process commands whose trigger never ran (no status after 10 minutes), then try
+ * FAILED commands again. Safe because processing is idempotent per command ID.
+ */
 export const retryFailedCommands = onSchedule(
-  { schedule: 'every 15 minutes', region: REGION, secrets: [DATABASE_URL], timeoutSeconds: 300 },
+  { schedule: 'every 15 minutes', region: REGION, secrets: [DATABASE_URL, SMS_API_KEY], timeoutSeconds: 300 },
   async () => {
+    await sweepUnprocessedCommands();
     const firestore = getFirestore();
     const failed = await firestore.collection('commands').where('status', '==', 'FAILED').limit(SWEEP_BATCH).get();
     let resolved = 0;
@@ -132,3 +151,21 @@ export const retryFailedCommands = onSchedule(
     logger.info('Failed-command sweep finished', { found: failed.size, resolved });
   },
 );
+
+/** Lost trigger events: the money hasn't moved and the agent's phone still says "waiting for the server". */
+export async function sweepUnprocessedCommands(): Promise<void> {
+  const unprocessed = await findUnprocessedCommands(getFirestore());
+  if (unprocessed.length === 0) return;
+  logger.warn('Commands found unprocessed; their trigger never ran', { count: unprocessed.length, ids: unprocessed.map((c) => c.id) });
+  let processed = 0;
+  for (const command of unprocessed) {
+    try {
+      await processAndRecord(getFirestore().collection('commands').doc(command.id), command.id, command.data);
+      processed += 1;
+    } catch (error) {
+      // Left without status, so the next sweep tries again.
+      logger.error('Unprocessed command still cannot be processed', { commandId: command.id, error });
+    }
+  }
+  logger.info('Unprocessed-command sweep finished', { found: unprocessed.length, processed });
+}
