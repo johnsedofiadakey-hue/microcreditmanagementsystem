@@ -91,7 +91,6 @@ export const NAV: NavSection[] = [
         label: 'Cash & handovers',
         icon: Wallet,
         roles: ['SUPER_ADMIN', 'FINANCE', 'BRANCH_MANAGER', 'CASHIER'],
-        comingIn: 'Step 6',
       },
     ],
   },

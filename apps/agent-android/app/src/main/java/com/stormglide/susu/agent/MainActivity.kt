@@ -79,6 +79,7 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         lock.onForeground(SystemClock.elapsedRealtime())
+        vm.refreshRoute()
     }
 
     override fun onStop() {

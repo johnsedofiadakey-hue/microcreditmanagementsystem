@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -51,9 +52,12 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
         if (state is AuthState.Ready) app.commands.observe(state.session.uid) else emptyFlow()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val route: StateFlow<List<RouteMember>> = auth.flatMapLatest { state ->
+    private val routeRefresh = MutableStateFlow(0)
+    val route: StateFlow<List<RouteMember>> = combine(auth, routeRefresh) { state, _ -> state }.flatMapLatest { state ->
         if (state is AuthState.Ready) app.routes.today(state.session.agentPairId) else emptyFlow()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun refreshRoute() { routeRefresh.value += 1 }
 
     /** Records that have not reached the server. Sign-out is blocked while this is above zero. */
     val unsyncedCount: StateFlow<Int> = queue.map { list -> list.count { it.onPhoneOnly } }

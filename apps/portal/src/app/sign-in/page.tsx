@@ -119,7 +119,7 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
+    <main className="grid min-h-screen min-w-0 grid-cols-[minmax(0,1fr)] lg:grid-cols-[1.1fr_1fr]">
       <section className="relative hidden overflow-hidden bg-sidebar p-12 text-sidebar-foreground lg:flex lg:flex-col lg:justify-between">
         <div
           aria-hidden
@@ -147,8 +147,8 @@ export default function SignInPage() {
         <p className="relative text-xs text-sidebar-muted">Built by Stormglide</p>
       </section>
 
-      <section className="flex items-center justify-center p-6">
-        <div className="grid w-full max-w-sm gap-6">
+      <section className="flex min-w-0 items-center justify-center p-6">
+        <div className="grid min-w-0 w-full max-w-sm gap-6">
           <div className="grid gap-1.5">
             <h1 className="font-heading text-2xl font-bold tracking-tight">
               {step.kind === 'mfa' ? 'Confirm it’s you' : step.kind === 'reset-sent' ? 'Check your email' : 'Sign in'}

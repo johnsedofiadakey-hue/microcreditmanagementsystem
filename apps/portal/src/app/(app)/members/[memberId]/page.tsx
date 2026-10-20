@@ -182,7 +182,16 @@ export default function MemberProfilePage() {
     );
   }
 
-  const total = member.accounts.reduce((sum, a) => sum + a.balancePesewas, 0);
+  const businessBalances = Array.from(
+    member.accounts.reduce((balances, account) => {
+      const current = balances.get(account.businessId);
+      balances.set(account.businessId, {
+        name: account.businessName,
+        balancePesewas: (current?.balancePesewas ?? 0) + account.balancePesewas,
+      });
+      return balances;
+    }, new Map<string, { name: string; balancePesewas: number }>()),
+  );
 
   return (
     <div className="grid gap-6">
@@ -202,10 +211,16 @@ export default function MemberProfilePage() {
             <span className="text-[13px] text-muted-foreground">{branchName(member.branchId)}</span>
           </div>
         </div>
-        <div className="text-left sm:text-right">
-          <p className="text-[13px] text-muted-foreground">Total Susu balance</p>
-          <p className="money font-heading text-2xl font-bold">{formatCedis(total)}</p>
-        </div>
+        {businessBalances.length > 0 && (
+          <dl className="grid gap-2 text-left sm:text-right" aria-label="Balances by business">
+            {businessBalances.map(([businessId, balance]) => (
+              <div key={businessId}>
+                <dt className="text-[13px] text-muted-foreground">{balance.name} balance</dt>
+                <dd className="money font-heading text-xl font-bold">{formatCedis(balance.balancePesewas)}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
 
       <ApprovalPanel member={member} />

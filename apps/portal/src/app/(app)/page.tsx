@@ -43,7 +43,7 @@ function useToday(scope: string | null, headOffice: boolean) {
     const key = todayKey();
     if (scope === null && !headOffice) return;
     const ref =
-      scope === null ? doc(db, 'dashboards', 'company', 'days', key) : doc(db, 'dashboards', 'branches', scope, 'days', key);
+      scope === null ? doc(db, 'dashboards', 'company', 'days', key) : doc(db, 'branchDashboards', scope, 'days', key);
     return onSnapshot(
       ref,
       (snap) =>
@@ -52,7 +52,10 @@ function useToday(scope: string | null, headOffice: boolean) {
             ? { kind: 'company', data: snap.exists() ? (snap.data() as CompanyDay) : null }
             : { kind: 'branch', data: snap.exists() ? (snap.data() as BranchDay) : null },
         ),
-      () => setError(true),
+      () => {
+        setDay(null);
+        setError(true);
+      },
     );
   }, [scope, headOffice]);
 
@@ -110,48 +113,60 @@ export default function OverviewPage() {
           <h2 id="today" className="font-heading text-base font-bold">
             Today at a glance
           </h2>
-          {day?.data == null && !error && day && <StatusChip tone="neutral">No activity yet</StatusChip>}
+          {day?.data == null && !error && day && <StatusChip tone="neutral">Figures not available</StatusChip>}
           {error && <StatusChip tone="warning">Live figures unavailable</StatusChip>}
         </div>
 
-        {day?.kind === 'company' ? (
+        {error || !day?.data ? (
+          <Card>
+            <CardContent>
+              <p className="text-sm text-muted-foreground" role="status">
+                {error
+                  ? 'Could not load today’s figures. Check your connection or try again later.'
+                  : day
+                    ? 'Today’s dashboard has not been published yet. Collection and cash records remain available in their own screens.'
+                    : 'Loading today’s figures…'}
+              </p>
+            </CardContent>
+          </Card>
+        ) : day.kind === 'company' ? (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Stat label="Collected today" value={formatCedis(day.data?.collectedPesewas ?? 0)} icon={HandCoins} money />
-            <Stat label="Branches open" value={String(day.data?.branchesOpen ?? 0)} icon={Building2} />
-            <Stat label="Branches closed" value={String(day.data?.branchesClosed ?? 0)} icon={Building2} />
-            <Stat label="Open exceptions" value={String(day.data?.exceptions ?? 0)} icon={Activity} />
+            <Stat label="Collected today" value={formatCedis(day.data.collectedPesewas)} icon={HandCoins} money />
+            <Stat label="Branches open" value={String(day.data.branchesOpen)} icon={Building2} />
+            <Stat label="Branches closed" value={String(day.data.branchesClosed)} icon={Building2} />
+            <Stat label="Open exceptions" value={String(day.data.exceptions)} icon={Activity} />
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Stat
               label="Collected today"
-              value={formatCedis(day?.kind === 'branch' ? (day.data?.collectedPesewas ?? 0) : 0)}
+              value={formatCedis(day.data.collectedPesewas)}
               icon={HandCoins}
               money
-              hint={`${day?.kind === 'branch' ? (day.data?.collectionCount ?? 0) : 0} collections synced`}
+              hint={`${day.data.collectionCount} collections synced`}
             />
             <Stat
               label="Handed over"
-              value={formatCedis(day?.kind === 'branch' ? (day.data?.handedOverPesewas ?? 0) : 0)}
+              value={formatCedis(day.data.handedOverPesewas)}
               icon={HandCoins}
               money
             />
             <Stat
               label="Active agent pairs"
-              value={String(day?.kind === 'branch' ? (day.data?.activePairs ?? 0) : 0)}
+              value={String(day.data.activePairs)}
               icon={UsersRound}
             />
             <Stat
               label="Waiting to sync"
-              value={String(day?.kind === 'branch' ? (day.data?.pendingSyncCount ?? 0) : 0)}
+              value={String(day.data.pendingSyncCount)}
               icon={CloudOff}
-              hint="Recorded on phones, not yet received"
+              hint="See agent phones for records not yet received"
             />
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          Figures update live as collections post. Only synced collections are counted.
-        </p>
+        {day?.data && !error && (
+          <p className="text-xs text-muted-foreground">Figures update live as collections post. Only synced collections are counted.</p>
+        )}
       </section>
 
       {shortcuts.length > 0 && (
@@ -202,6 +217,7 @@ export default function OverviewPage() {
 const SHORTCUT_COPY: Record<string, string> = {
   '/members': 'Register, search and review members',
   '/approvals': 'Requests waiting for a second person',
+  '/cash': 'Vaults, agent custody and branch close by business',
   '/admin/products': 'Products and versions for each business',
   '/admin/branches': 'Branches and their codes',
   '/admin/staff': 'People, roles and branch access',

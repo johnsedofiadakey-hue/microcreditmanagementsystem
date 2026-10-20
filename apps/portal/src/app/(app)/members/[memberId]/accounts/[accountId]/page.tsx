@@ -9,9 +9,10 @@ import { useMemo } from 'react';
 import { LoadError } from '@/components/load-error';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/ui/data-table';
+import { ListPager } from '@/components/ui/list-pager';
 import { RecordStatus, StatusChip } from '@/components/ui/status-chip';
 import { getAccountStatement, type StatementLine } from '@/lib/members-api';
-import { useList } from '@/lib/use-list';
+import { usePagedList } from '@/lib/use-paged-list';
 import { formatDateTime } from '@/lib/utils';
 
 const KIND_COPY: Record<string, string> = {
@@ -29,12 +30,16 @@ const money = (v: number) => (v ? formatCedis(v) : '—');
 
 export default function StatementPage() {
   const { memberId, accountId } = useParams<{ memberId: string; accountId: string }>();
-  const { rows, loading, error } = useList(
-    () => getAccountStatement({ susuAccountId: accountId }).then((r) => (r ? [r] : [])),
+  const { rows: pages, loading, loadingMore, nextCursor, error, loadMore } = usePagedList(
+    async (cursor) => {
+      const result = await getAccountStatement({ susuAccountId: accountId, cursor });
+      return { rows: result ? [result] : [], nextCursor: result?.nextCursor ?? null };
+    },
     [accountId],
   );
-  const statement = rows[0];
+  const statement = pages[0];
   const account = statement?.account;
+  const lines = pages.flatMap((page) => page.lines);
 
   const columns = useMemo<ColumnDef<StatementLine, unknown>[]>(
     () => [
@@ -96,13 +101,14 @@ export default function StatementPage() {
           </h1>
           <div className="flex items-center gap-2">
             {account && <RecordStatus status={account.status} />}
+            {account && <span className="text-xs text-muted-foreground">{account.businessName}</span>}
             <span className="font-mono text-xs text-muted-foreground">{accountId}</span>
           </div>
         </div>
         <Card className="sm:min-w-56">
           <CardContent className="py-4">
             <p className="text-[13px] text-muted-foreground">Balance owed to member</p>
-            <p className="money font-heading text-2xl font-bold">{formatCedis(account?.balancePesewas ?? 0)}</p>
+            <p className="money font-heading text-2xl font-bold">{account ? formatCedis(account.balancePesewas) : '—'}</p>
           </CardContent>
         </Card>
       </div>
@@ -113,7 +119,7 @@ export default function StatementPage() {
       </p>
       <DataTable
         columns={columns}
-        data={statement?.lines ?? []}
+        data={lines}
         loading={loading}
         searchPlaceholder="Search entries or references"
         empty={
@@ -123,6 +129,7 @@ export default function StatementPage() {
           </div>
         }
       />
+      <ListPager count={lines.length} hasMore={!!nextCursor} loading={loadingMore} onLoadMore={loadMore} />
     </div>
   );
 }

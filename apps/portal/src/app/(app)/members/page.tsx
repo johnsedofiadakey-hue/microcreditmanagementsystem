@@ -7,13 +7,14 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { LoadError } from '@/components/load-error';
 import { DataTable } from '@/components/ui/data-table';
+import { ListPager } from '@/components/ui/list-pager';
 import { PageHeader } from '@/components/ui/page-header';
 import { KycChip, RecordStatus } from '@/components/ui/status-chip';
 import { can } from '@/lib/access';
 import { useSession } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { searchMembers, type MemberRow } from '@/lib/members-api';
-import { useList } from '@/lib/use-list';
+import { usePagedList } from '@/lib/use-paged-list';
 import { cn, formatDateTime } from '@/lib/utils';
 import { RegisterMemberDialog } from './register-member-dialog';
 
@@ -36,9 +37,11 @@ export default function MembersPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  const { rows, loading, error } = useList(
-    () =>
-      searchMembers({ branchId: scope ?? undefined, query: debounced, status: status || undefined }).then((r) => r.members),
+  const { rows, loading, loadingMore, nextCursor, error, loadMore } = usePagedList(
+    async (cursor) => {
+      const result = await searchMembers({ branchId: scope ?? undefined, query: debounced, status: status || undefined, cursor });
+      return { rows: result.members, nextCursor: result.nextCursor };
+    },
     [scope, debounced, status],
   );
 
@@ -137,6 +140,7 @@ export default function MembersPage() {
           </div>
         }
       />
+      <ListPager count={rows.length} hasMore={!!nextCursor} loading={loadingMore} onLoadMore={loadMore} />
     </div>
   );
 }

@@ -5,13 +5,14 @@ import { ScrollText } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { LoadError } from '@/components/load-error';
 import { DataTable } from '@/components/ui/data-table';
+import { ListPager } from '@/components/ui/list-pager';
 import { Field } from '@/components/ui/field';
 import { NativeSelect } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatusChip } from '@/components/ui/status-chip';
 import { listAuditEvents, type AuditEventSummary } from '@/lib/api';
 import { useBranch } from '@/lib/branch-context';
-import { useList } from '@/lib/use-list';
+import { usePagedList } from '@/lib/use-paged-list';
 import { formatDateTime } from '@/lib/utils';
 
 const ENTITY_KINDS = [
@@ -41,8 +42,11 @@ const ACTION_COPY: Record<string, string> = {
 export default function AuditPage() {
   const { scope, branchName } = useBranch();
   const [entityKind, setEntityKind] = useState('');
-  const { rows, loading, error } = useList(
-    () => listAuditEvents({ branchId: scope ?? undefined, entityKind: entityKind || undefined }).then((r) => r.events),
+  const { rows, loading, loadingMore, nextCursor, error, loadMore } = usePagedList(
+    async (cursor) => {
+      const result = await listAuditEvents({ branchId: scope ?? undefined, entityKind: entityKind || undefined, cursor });
+      return { rows: result.events, nextCursor: result.nextCursor };
+    },
     [scope, entityKind],
   );
 
@@ -130,6 +134,7 @@ export default function AuditPage() {
           </div>
         }
       />
+      <ListPager count={rows.length} hasMore={!!nextCursor} loading={loadingMore} onLoadMore={loadMore} />
     </div>
   );
 }
