@@ -1,8 +1,8 @@
 'use client';
 
-import { formatCedis, isHeadOffice } from '@susu/shared';
+import { formatCedis, isHeadOffice, type BranchDayDashboard, type CompanyDayDashboard } from '@susu/shared';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { Activity, ArrowRight, Building2, CloudOff, HandCoins, Smartphone, UsersRound } from 'lucide-react';
+import { Activity, ArrowRight, Building2, CloudOff, HandCoins, Landmark, Smartphone, TriangleAlert, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,23 +12,12 @@ import { can, navFor, ROLE_LABELS } from '@/lib/access';
 import { useSession } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { firebase } from '@/lib/firebase';
-import { todayKey } from '@/lib/utils';
+import { useBusinesses } from '@/lib/use-businesses';
+import { cn, formatDateTime, todayKey } from '@/lib/utils';
 
-/** API.md §4 read models (planned — Step 7; rules already allow these reads). */
-interface BranchDay {
-  collectedPesewas: number;
-  collectionCount: number;
-  activePairs: number;
-  handedOverPesewas: number;
-  pendingSyncCount: number;
-  closed: boolean;
-}
-interface CompanyDay {
-  collectedPesewas: number;
-  branchesClosed: number;
-  branchesOpen: number;
-  exceptions: number;
-}
+/** API.md §4 read models, published by Step 7 (`publishDayDashboards`). */
+type BranchDay = BranchDayDashboard;
+type CompanyDay = CompanyDayDashboard;
 
 type Day = { kind: 'branch'; data: BranchDay | null } | { kind: 'company'; data: CompanyDay | null };
 
@@ -165,9 +154,15 @@ export default function OverviewPage() {
           </div>
         )}
         {day?.data && !error && (
-          <p className="text-xs text-muted-foreground">Figures update live as collections post. Only synced collections are counted.</p>
+          <p className="text-xs text-muted-foreground">
+            Figures update live as collections post; only synced collections are counted. Updated {formatDateTime(day.data.computedAt)}.
+          </p>
         )}
       </section>
+
+      {day?.data && !error && <CashControls day={day} />}
+      {day?.data && !error && <BusinessBreakdown day={day} />}
+      {day?.kind === 'company' && day.data && !error && <BranchComparison data={day.data} />}
 
       {shortcuts.length > 0 && (
         <section aria-labelledby="shortcuts" className="grid gap-3">
@@ -214,7 +209,148 @@ export default function OverviewPage() {
   );
 }
 
+function CashControls({ day }: { day: Day }) {
+  const data = day.data!;
+  const unmatched = data.unmatchedDeposits ?? { count: 0, amountPesewas: 0 };
+  const oldest = day.kind === 'company' ? day.data?.unmatchedDeposits?.oldestDepositedOn : null;
+  return (
+    <section aria-labelledby="controls" className="grid gap-3">
+      <h2 id="controls" className="font-heading text-base font-bold">Cash controls</h2>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Link href="/cash" className="group rounded-xl focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
+          <Card className={cn('h-full transition group-hover:border-primary/40', data.openCases > 0 && 'border-warning/40 bg-warning-soft/30')}>
+            <CardContent className="flex items-start gap-3">
+              <TriangleAlert className={cn('mt-0.5 size-5', data.openCases > 0 ? 'text-warning' : 'text-muted-foreground')} aria-hidden />
+              <div className="grid gap-0.5">
+                <p className="font-heading font-bold">{data.openCases} open cash {data.openCases === 1 ? 'difference' : 'differences'}</p>
+                <p className="text-[13px] text-muted-foreground">Handover, close and bank deposit differences waiting for an owner to resolve.</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href={day.kind === 'company' ? '/bank' : '/cash'} className="group rounded-xl focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
+          <Card className={cn('h-full transition group-hover:border-primary/40', unmatched.count > 0 && 'border-warning/40 bg-warning-soft/30')}>
+            <CardContent className="flex items-start gap-3">
+              <Landmark className={cn('mt-0.5 size-5', unmatched.count > 0 ? 'text-warning' : 'text-muted-foreground')} aria-hidden />
+              <div className="grid gap-0.5">
+                <p className="font-heading font-bold">
+                  {unmatched.count} {unmatched.count === 1 ? 'deposit' : 'deposits'} awaiting bank match · <span className="money">{formatCedis(unmatched.amountPesewas)}</span>
+                </p>
+                <p className="text-[13px] text-muted-foreground">
+                  Cash that left a vault but isn’t confirmed on a bank statement yet{oldest ? `; oldest deposited ${oldest}` : ''}.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function BusinessBreakdown({ day }: { day: Day }) {
+  const { name } = useBusinesses();
+  const rows = day.data?.businesses ?? [];
+  if (!rows.length) return null;
+  return (
+    <section aria-labelledby="by-business" className="grid gap-3">
+      <h2 id="by-business" className="font-heading text-base font-bold">By business</h2>
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-xs">
+        <table className="w-full text-sm">
+          <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground uppercase">
+            <tr>
+              <th scope="col" className="h-10 px-4 text-left font-medium">Business</th>
+              <th scope="col" className="px-4 text-right font-medium">Collected</th>
+              {day.kind === 'branch' && <th scope="col" className="px-4 text-right font-medium">Handed over</th>}
+              <th scope="col" className="px-4 text-right font-medium">Paid out</th>
+              {day.kind === 'branch' && <th scope="col" className="px-4 text-right font-medium">Banked · confirmed</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {day.kind === 'branch'
+              ? day.data!.businesses.map((b) => (
+                  <tr key={b.businessId} className="border-b border-border last:border-0">
+                    <td className="min-w-48 px-4 py-3">
+                      <span className="font-medium">{name(b.businessId)}</span>
+                      <span className="mt-1 flex flex-wrap items-center gap-2">
+                        <StatusChip tone={b.closed ? 'success' : 'neutral'}>{b.closed ? 'Day closed' : 'Open'}</StatusChip>
+                        {b.openCases > 0 && <span className="text-xs text-warning">{b.openCases} open {b.openCases === 1 ? 'case' : 'cases'}</span>}
+                      </span>
+                    </td>
+                    <td className="money px-4 py-3 text-right">{formatCedis(b.collectedPesewas)}</td>
+                    <td className="money px-4 py-3 text-right">{formatCedis(b.handedOverPesewas)}</td>
+                    <td className="money px-4 py-3 text-right">{formatCedis(b.paidOutPesewas)}</td>
+                    <td className="money px-4 py-3 text-right">
+                      {formatCedis(b.depositedPesewas)}
+                      <span className="block text-xs text-muted-foreground">{formatCedis(b.bankConfirmedPesewas)} confirmed</span>
+                    </td>
+                  </tr>
+                ))
+              : day.data!.businesses.map((b) => (
+                  <tr key={b.businessId} className="border-b border-border last:border-0">
+                    <td className="px-4 py-3 font-medium">{name(b.businessId)}</td>
+                    <td className="money px-4 py-3 text-right">{formatCedis(b.collectedPesewas)}</td>
+                    <td className="money px-4 py-3 text-right">{formatCedis(b.paidOutPesewas)}</td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function BranchComparison({ data }: { data: CompanyDay }) {
+  const { setScope } = useBranch();
+  const branches = [...(data.branches ?? [])].sort((a, b) => b.collectedPesewas - a.collectedPesewas);
+  if (!branches.length) return null;
+  const top = Math.max(1, ...branches.map((b) => b.collectedPesewas));
+  return (
+    <section aria-labelledby="comparison" className="grid gap-3">
+      <h2 id="comparison" className="font-heading text-base font-bold">Branch comparison</h2>
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-xs">
+        <table className="w-full text-sm">
+          <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground uppercase">
+            <tr>
+              <th scope="col" className="h-10 px-4 text-left font-medium">Branch</th>
+              <th scope="col" className="px-4 text-left font-medium"><span className="sr-only">Share of top branch</span></th>
+              <th scope="col" className="px-4 text-right font-medium">Collected today</th>
+              <th scope="col" className="px-4 text-right font-medium">Collections</th>
+              <th scope="col" className="px-4 text-left font-medium">Day</th>
+            </tr>
+          </thead>
+          <tbody>
+            {branches.map((b) => (
+              <tr key={b.branchId} className="border-b border-border last:border-0">
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setScope(b.branchId)}
+                    className="text-left font-medium hover:text-primary hover:underline focus-visible:underline focus-visible:outline-none"
+                    title="Switch to this branch"
+                  >
+                    {b.name} <span className="font-mono text-xs text-muted-foreground">{b.code}</span>
+                  </button>
+                </td>
+                <td className="w-1/3 px-4 py-3">
+                  <div className="h-2 rounded-full bg-muted" aria-hidden>
+                    <div className="h-2 rounded-full bg-primary" style={{ width: `${(b.collectedPesewas / top) * 100}%` }} />
+                  </div>
+                </td>
+                <td className="money px-4 py-3 text-right font-medium">{formatCedis(b.collectedPesewas)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{b.collectionCount}</td>
+                <td className="px-4 py-3"><StatusChip tone={b.closed ? 'success' : 'neutral'}>{b.closed ? 'Closed' : 'Open'}</StatusChip></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 const SHORTCUT_COPY: Record<string, string> = {
+  '/bank': 'Match branch deposits to the bank statement',
   '/members': 'Register, search and review members',
   '/approvals': 'Requests waiting for a second person',
   '/cash': 'Vaults, agent custody and branch close by business',

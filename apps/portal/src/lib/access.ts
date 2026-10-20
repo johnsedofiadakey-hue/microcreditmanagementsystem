@@ -2,6 +2,7 @@ import { ROLES, type Role } from '@susu/shared';
 import {
   Building2,
   ClipboardCheck,
+  Landmark,
   LayoutDashboard,
   Package,
   ScrollText,
@@ -46,6 +47,8 @@ export const can = {
   uploadKyc: (role: Role) => ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'].includes(role),
   /** Full Ghana Card number on the member profile. Everyone else sees GHA-•••••••••-3. */
   seeFullGhanaCard: (role: Role) => ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER'].includes(role),
+  /** Bank accounts, statement import, matching and setting lines aside (API.md §2 "Bank deposits"). */
+  reconcileBank: (role: Role) => role === 'SUPER_ADMIN' || role === 'FINANCE',
 };
 
 /** Roles a person may create through createStaffUser (API.md §2). */
@@ -91,6 +94,12 @@ export const NAV: NavSection[] = [
         label: 'Cash & handovers',
         icon: Wallet,
         roles: ['SUPER_ADMIN', 'FINANCE', 'BRANCH_MANAGER', 'CASHIER'],
+      },
+      {
+        href: '/bank',
+        label: 'Bank reconciliation',
+        icon: Landmark,
+        roles: ['SUPER_ADMIN', 'FINANCE', 'COMPLIANCE'],
       },
     ],
   },
