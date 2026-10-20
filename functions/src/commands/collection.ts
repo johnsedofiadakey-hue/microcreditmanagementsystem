@@ -1,6 +1,8 @@
 import { formatCedis, type CollectionCommand } from '@susu/shared';
 import type { Queryable } from '../db/types.js';
+import { openCase, today } from '../cash/common.js';
 import { ensureCashAccount } from '../ledger/accounts.js';
+import { routeStatusFor, type RouteStatus } from '../routes/routes.js';
 import { postJournal } from '../ledger/post.js';
 import { writeAudit } from '../lib/audit.js';
 import { DomainError } from '../lib/errors.js';
@@ -9,10 +11,25 @@ import type { BoundDevice } from '../org/devices.js';
 export interface CollectionPosted {
   batchId: string;
   postedAt: string;
+  routeStatus: RouteStatus;
+  /** The cash day it counts towards: today, or the next day when today's close already happened (H2). */
+  cashDay: string;
+  postedAfterClose: boolean;
+}
+
+/** The day after an ISO yyyy-mm-dd date. */
+function nextDay(day: string): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 /**
- * A member paid cash to an agent pair.
+ * A member paid cash to an agent pair. The member gave real cash and gets a receipt, so a valid signed
+ * collection always posts; the controls decide how it is labelled and who must look at it:
+ *   - route (audit H1): ON_ROUTE, PREVIOUS_ROUTE (captured before a recent reassignment) or OFF_ROUTE,
+ *     which opens an OFF_ROUTE_COLLECTION case for the branch;
+ *   - cash day (audit H2): if this business's branch day already closed, the collection counts towards
+ *     the next day; the closed day stays as it was frozen.
+
  *   Debit  AGENT_CASH_CUSTODY (the pair now holds the cash — its custody for the account's business)
  *   Credit MEMBER_SUSU        (the company now owes the member)
  * Runs inside the caller's transaction together with the command record, audit and SMS outbox.
@@ -59,6 +76,19 @@ export async function postCollection(
   }
   if (account.status !== 'ACTIVE') throw new DomainError('ACCOUNT_NOT_ACTIVE', `Susu account is ${account.status}`);
 
+  // Serialise with a branch close (which locks the branch row for update) so a collection lands either
+  // before the close is frozen or clearly after it.
+  await tx.query('select 1 from branches where id = $1 for share', [device.branchId]);
+  const day = today();
+  const closedToday = await tx.query('select 1 from branch_closes where branch_id = $1 and business_id = $2 and day = $3', [
+    device.branchId,
+    account.business_id,
+    day,
+  ]);
+  const postedAfterClose = closedToday.rowCount > 0;
+  const cashDay = postedAfterClose ? nextDay(day) : day;
+  const routeStatus = await routeStatusFor(tx, { susuAccountId, agentPairId: device.agentPairId, capturedAt: command.capturedAt });
+
   // The pair's custody for this account's business: each business's cash is tracked apart (ADR-001).
   const custodyAccountId = await ensureCashAccount(tx, 'AGENT_CASH_CUSTODY', device.agentPairId, account.business_id);
 
@@ -76,10 +106,25 @@ export async function postCollection(
     ],
   });
 
+  const caseId =
+    routeStatus === 'OFF_ROUTE'
+      ? await openCase(tx, {
+          branchId: device.branchId,
+          businessId: account.business_id,
+          kind: 'OFF_ROUTE_COLLECTION',
+          amountPesewas,
+          summary: `${formatCedis(amountPesewas)} collected from ${account.full_name} by a pair this account is not assigned to`,
+          entityKind: 'collection',
+          entityId: commandId,
+          openedBy: 'SYSTEM',
+        })
+      : null;
+
   await tx.query(
     `insert into collections
-       (id, member_id, susu_account_id, agent_pair_id, branch_id, agent_uid, device_id, amount_pesewas, captured_at, batch_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+       (id, member_id, susu_account_id, agent_pair_id, branch_id, agent_uid, device_id, amount_pesewas, captured_at, batch_id,
+        business_id, cash_day, route_status, posted_after_close, case_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       commandId,
       memberId,
@@ -91,6 +136,11 @@ export async function postCollection(
       amountPesewas,
       command.capturedAt,
       posting.batchId,
+      account.business_id,
+      cashDay,
+      routeStatus,
+      postedAfterClose,
+      caseId,
     ],
   );
 
@@ -126,8 +176,8 @@ export async function postCollection(
     branchId: device.branchId,
     deviceId: device.id,
     channel: 'AGENT_APP',
-    data: { memberId, susuAccountId, amountPesewas, batchId: posting.batchId },
+    data: { memberId, susuAccountId, amountPesewas, batchId: posting.batchId, routeStatus, cashDay, postedAfterClose, caseId },
   });
 
-  return { batchId: posting.batchId, postedAt: posting.postedAt };
+  return { batchId: posting.batchId, postedAt: posting.postedAt, routeStatus, cashDay, postedAfterClose };
 }

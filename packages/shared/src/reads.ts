@@ -43,7 +43,17 @@ export interface BusinessSummary {
   smsSenderId: string;
   address: string;
   status: 'ACTIVE' | 'INACTIVE';
+  /** Modules switched on (audit M3). Only these may get new products and accounts. */
+  enabledModules: BusinessModule[];
 }
+
+export const BUSINESS_MODULES = ['SUSU', 'LOANS', 'WELFARE'] as const;
+export type BusinessModule = (typeof BUSINESS_MODULES)[number];
+
+export const setBusinessModuleRequestSchema = z
+  .object({ businessId: z.uuid(), module: z.enum(BUSINESS_MODULES), enabled: z.boolean(), reason: z.string().trim().min(3).max(500) })
+  .strict();
+export type SetBusinessModuleRequest = z.infer<typeof setBusinessModuleRequestSchema>;
 
 export const listBranchesRequestSchema = z.object({}).strict();
 export interface BranchSummary {

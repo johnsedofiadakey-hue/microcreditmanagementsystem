@@ -15,7 +15,10 @@ service firebase.storage {
 
     match /kyc-inbox/{uid}/{fileName} {
       // fileName must be {uuid}.{jpg|jpeg|png|webp}, matching KYC_INBOX_PATH in @susu/shared.
+      // resource == null: a new file only. Overwriting would let a photo be swapped after registration
+      // and before the server moves it (found by the Storage rules tests, audit M7).
       allow create: if canUploadKyc()
+        && resource == null
         && uid == request.auth.uid
         && fileName.matches('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[.](jpg|jpeg|png|webp)$')
         && request.resource.size < 8 * 1024 * 1024

@@ -123,6 +123,7 @@ describe('permissions and maker-checker', () => {
       'device.bound',
       'member.approved',
       'member.registered',
+      'route.assigned',
       'staff.created',
       'susu_account.opened',
       'susu_product.created',

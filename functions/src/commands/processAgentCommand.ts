@@ -3,6 +3,7 @@ import type { Database, Queryable } from '../db/types.js';
 import { verifyDeviceSignature } from '../lib/deviceKeys.js';
 import { DomainError, isDomainError } from '../lib/errors.js';
 import { getDevice, type BoundDevice } from '../org/devices.js';
+import { recordHandoverDeclaration } from '../cash/handovers.js';
 import { postCollection } from './collection.js';
 
 /**
@@ -47,7 +48,13 @@ export async function processAgentCommand(
       if (previous) return previous;
 
       const device = await authorise(tx, commandId, command);
-      const posted = await dispatch(tx, commandId, command, device);
+      if (command.type === 'HANDOVER_DECLARATION') {
+        // Evidence only: no money moves until a cashier confirms each line (audit H3).
+        const { declarationId } = await recordHandoverDeclaration(tx, commandId, command, device);
+        await recordCommand(tx, commandId, command, 'RECORDED', null, null, declarationId);
+        return { status: 'RECORDED', recordId: declarationId, serverTime: serverTime() } as const;
+      }
+      const posted = await postCollection(tx, commandId, command, device);
       await recordCommand(tx, commandId, command, 'POSTED', null, posted.batchId);
       return { status: 'POSTED', postingId: posted.batchId, serverTime: posted.postedAt } as const;
     });
@@ -109,39 +116,39 @@ async function authorise(tx: Queryable, commandId: string, command: AgentCommand
   return device;
 }
 
-async function dispatch(tx: Queryable, commandId: string, command: AgentCommand, device: BoundDevice) {
-  switch (command.type) {
-    case 'COLLECTION':
-      return postCollection(tx, commandId, command, device);
-  }
-}
-
 async function recordCommand(
   tx: Queryable,
   commandId: string,
   command: AgentCommand,
-  status: 'POSTED' | 'REJECTED',
+  status: 'POSTED' | 'REJECTED' | 'RECORDED',
   rejectReason: string | null,
   batchId: string | null,
+  recordId: string | null = null,
 ): Promise<void> {
   await tx.query(
-    `insert into agent_commands (id, type, agent_uid, device_id, seq, captured_at, status, reject_reason, batch_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `insert into agent_commands (id, type, agent_uid, device_id, seq, captured_at, status, reject_reason, batch_id, record_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      on conflict (id) do nothing`,
-    [commandId, command.type, command.agentUid, command.deviceId, command.seq, command.capturedAt, status, rejectReason, batchId],
+    [commandId, command.type, command.agentUid, command.deviceId, command.seq, command.capturedAt, status, rejectReason, batchId, recordId],
   );
 }
 
 async function loadPreviousResult(q: Queryable, commandId: string): Promise<CommandResult | null> {
-  const result = await q.query<{ status: 'POSTED' | 'REJECTED'; reject_reason: string | null; batch_id: string | null; received_at: Date }>(
-    'select status, reject_reason, batch_id, received_at from agent_commands where id = $1',
-    [commandId],
-  );
+  const result = await q.query<{
+    status: 'POSTED' | 'REJECTED' | 'RECORDED';
+    reject_reason: string | null;
+    batch_id: string | null;
+    record_id: string | null;
+    received_at: Date;
+  }>('select status, reject_reason, batch_id, record_id, received_at from agent_commands where id = $1', [commandId]);
   const row = result.rows[0];
   if (!row) return null;
   const serverTime = new Date(row.received_at).toISOString();
   if (row.status === 'POSTED' && row.batch_id) {
     return { status: 'POSTED', postingId: row.batch_id, serverTime };
+  }
+  if (row.status === 'RECORDED' && row.record_id) {
+    return { status: 'RECORDED', recordId: row.record_id, serverTime };
   }
   return {
     status: 'REJECTED',

@@ -6,7 +6,8 @@ import {
   listCasesRequestSchema,
   listHandoversRequestSchema,
   listWithdrawalsRequestSchema,
-  recordHandoverRequestSchema,
+  confirmHandoverRequestSchema,
+  listHandoverDeclarationsRequestSchema,
   rejectWithdrawalRequestSchema,
   requestWithdrawalRequestSchema,
   resolveCaseRequestSchema,
@@ -15,16 +16,23 @@ import {
 import { logger } from 'firebase-functions';
 import { resolveCase } from '../cash/cases.js';
 import { closeBranchDay, submitBranchCount } from '../cash/close.js';
-import { recordHandover } from '../cash/handovers.js';
+import { confirmHandover, listHandoverDeclarations } from '../cash/handovers.js';
+import { publishHandoverDeclaration } from '../projections/firestore.js';
 import { getBranchCashDay, getBranchClose, listCases, listHandovers, listWithdrawals } from '../cash/reads.js';
 import { approveWithdrawal, payWithdrawal, rejectWithdrawal, requestWithdrawal } from '../cash/withdrawals.js';
 import { SMS_API_KEY, getDatabase } from '../runtime.js';
 import { sendSms } from '../triggers/sms.js';
 import { staffCallable } from './staffCallable.js';
 
-// ── Handover ──
-export const recordHandoverFn = staffCallable(recordHandoverRequestSchema, ({ db, actor, input }) =>
-  db.transaction((tx) => recordHandover(tx, actor, input)),
+// ── Handover: the agents declare on the phone (command), a cashier confirms each business line ──
+export const confirmHandoverFn = staffCallable(confirmHandoverRequestSchema, async ({ db, actor, input }) => {
+  const result = await db.transaction((tx) => confirmHandover(tx, actor, input));
+  // The agents see the cashier's count on their phone.
+  await publishHandoverDeclaration(db, input.declarationId);
+  return result;
+});
+export const listHandoverDeclarationsFn = staffCallable(listHandoverDeclarationsRequestSchema, ({ db, actor, input }) =>
+  listHandoverDeclarations(db, actor, input),
 );
 export const listHandoversFn = staffCallable(listHandoversRequestSchema, ({ db, actor, input }) => listHandovers(db, actor, input));
 

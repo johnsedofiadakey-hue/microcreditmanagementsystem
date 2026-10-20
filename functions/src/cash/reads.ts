@@ -2,19 +2,22 @@ import type { BranchCashDay, BranchCloseChecklist, CaseKind, CaseSummary, Handov
 import type { Queryable } from '../db/types.js';
 import type { Actor } from '../lib/actor.js';
 import { requireBranch, requireRole } from '../lib/permissions.js';
-import { STAFF_READERS, branchScope } from '../reads/scope.js';
+import { STAFF_READERS, branchScope, decodeCursor, pageOf } from '../reads/scope.js';
 import { branchCashDay, branchCloseChecklist } from './close.js';
 
-const LIMIT = 200;
+/** Default page size; callers may ask for up to 200 (audit M5). */
+const DEFAULT_LIMIT = 50;
 const iso = (d: Date | string | null): string | null => (d ? new Date(d).toISOString() : null);
 
 /** Newest first, scoped to the caller's branches (head office: all, or the one asked for). */
 export async function listHandovers(
   q: Queryable,
   actor: Actor,
-  input: { branchId?: string; businessId?: string; day?: string },
-): Promise<{ handovers: HandoverSummary[] }> {
+  input: { branchId?: string; businessId?: string; day?: string; cursor?: string | null; limit?: number },
+): Promise<{ handovers: HandoverSummary[]; nextCursor: string | null }> {
   const scope = branchScope(actor, input.branchId);
+  const limit = input.limit ?? DEFAULT_LIMIT;
+  const after = decodeCursor(input.cursor);
   const rows = await q.query<{
     id: string;
     branch_id: string;
@@ -29,20 +32,27 @@ export async function listHandovers(
     note: string | null;
     case_id: string | null;
     batch_id: string;
+    declaration_id: string | null;
+    declared_pesewas: number | null;
   }>(
-    `select h.id, h.branch_id, h.business_id, h.agent_pair_id, p.name as agent_pair_name, to_char(h.day, 'YYYY-MM-DD') as day,
+    `select h.id, h.branch_id, h.business_id, h.agent_pair_id, h.declaration_id, h.declared_pesewas, p.name as agent_pair_name, to_char(h.day, 'YYYY-MM-DD') as day,
             h.expected_pesewas, h.counted_pesewas, h.received_by, h.received_at, h.note, h.case_id, h.batch_id
        from handovers h join agent_pairs p on p.id = h.agent_pair_id
       where ($1::uuid[] is null or h.branch_id = any($1::uuid[])) and ($2::date is null or h.day = $2::date)
         and ($3::uuid is null or h.business_id = $3::uuid)
-      order by h.received_at desc, h.id desc limit ${LIMIT}`,
-    [scope, input.day ?? null, input.businessId ?? null],
+        and ($4::timestamptz is null or (h.received_at, h.id) < ($4::timestamptz, $5::uuid))
+      order by h.received_at desc, h.id desc limit $6`,
+    [scope, input.day ?? null, input.businessId ?? null, after?.k ?? null, after?.id ?? null, limit + 1],
   );
+  const page = pageOf(rows.rows, limit, (r) => ({ k: new Date(r.received_at).toISOString(), id: r.id }));
   return {
-    handovers: rows.rows.map((r) => ({
+    nextCursor: page.nextCursor,
+    handovers: page.items.map((r) => ({
       id: r.id,
       branchId: r.branch_id,
       businessId: r.business_id,
+      declarationId: r.declaration_id,
+      declaredPesewas: r.declared_pesewas,
       agentPairId: r.agent_pair_id,
       agentPairName: r.agent_pair_name,
       day: r.day,
@@ -61,9 +71,11 @@ export async function listHandovers(
 export async function listWithdrawals(
   q: Queryable,
   actor: Actor,
-  input: { branchId?: string; businessId?: string; status?: WithdrawalStatus },
-): Promise<{ withdrawals: WithdrawalSummary[] }> {
+  input: { branchId?: string; businessId?: string; status?: WithdrawalStatus; cursor?: string | null; limit?: number },
+): Promise<{ withdrawals: WithdrawalSummary[]; nextCursor: string | null }> {
   const scope = branchScope(actor, input.branchId);
+  const limit = input.limit ?? DEFAULT_LIMIT;
+  const after = decodeCursor(input.cursor);
   const rows = await q.query<{
     id: string;
     branch_id: string;
@@ -88,11 +100,14 @@ export async function listWithdrawals(
        from withdrawal_requests w join members m on m.id = w.member_id
       where ($1::uuid[] is null or w.branch_id = any($1::uuid[])) and ($2::text is null or w.status = $2)
         and ($3::uuid is null or w.business_id = $3::uuid)
-      order by w.requested_at desc, w.id desc limit ${LIMIT}`,
-    [scope, input.status ?? null, input.businessId ?? null],
+        and ($4::timestamptz is null or (w.requested_at, w.id) < ($4::timestamptz, $5::uuid))
+      order by w.requested_at desc, w.id desc limit $6`,
+    [scope, input.status ?? null, input.businessId ?? null, after?.k ?? null, after?.id ?? null, limit + 1],
   );
+  const page = pageOf(rows.rows, limit, (r) => ({ k: new Date(r.requested_at).toISOString(), id: r.id }));
   return {
-    withdrawals: rows.rows.map((r) => ({
+    nextCursor: page.nextCursor,
+    withdrawals: page.items.map((r) => ({
       id: r.id,
       branchId: r.branch_id,
       businessId: r.business_id,
@@ -118,9 +133,11 @@ export async function listWithdrawals(
 export async function listCases(
   q: Queryable,
   actor: Actor,
-  input: { branchId?: string; businessId?: string; status?: 'OPEN' | 'RESOLVED' },
-): Promise<{ cases: CaseSummary[] }> {
+  input: { branchId?: string; businessId?: string; status?: 'OPEN' | 'RESOLVED'; cursor?: string | null; limit?: number },
+): Promise<{ cases: CaseSummary[]; nextCursor: string | null }> {
   const scope = branchScope(actor, input.branchId);
+  const limit = input.limit ?? DEFAULT_LIMIT;
+  const after = decodeCursor(input.cursor);
   const rows = await q.query<{
     id: string;
     branch_id: string;
@@ -140,11 +157,14 @@ export async function listCases(
     `select * from cases
       where ($1::uuid[] is null or branch_id = any($1::uuid[])) and ($2::text is null or status = $2)
         and ($3::uuid is null or business_id = $3::uuid)
-      order by opened_at desc, id desc limit ${LIMIT}`,
-    [scope, input.status ?? null, input.businessId ?? null],
+        and ($4::timestamptz is null or (opened_at, id) < ($4::timestamptz, $5::uuid))
+      order by opened_at desc, id desc limit $6`,
+    [scope, input.status ?? null, input.businessId ?? null, after?.k ?? null, after?.id ?? null, limit + 1],
   );
+  const page = pageOf(rows.rows, limit, (r) => ({ k: new Date(r.opened_at).toISOString(), id: r.id }));
   return {
-    cases: rows.rows.map((r) => ({
+    nextCursor: page.nextCursor,
+    cases: page.items.map((r) => ({
       id: r.id,
       branchId: r.branch_id,
       businessId: r.business_id,

@@ -42,6 +42,7 @@ export async function branchCloseChecklist(q: Queryable, branchId: string, busin
     const frozen = (typeof row.checklist === 'string' ? JSON.parse(row.checklist) : row.checklist) as BranchCloseChecklist;
     // Closes frozen before the business split (migration 006) have no business fields; fill them in.
     return {
+      ...emptyLateFields,
       ...frozen,
       branchId,
       businessId,
@@ -50,6 +51,8 @@ export async function branchCloseChecklist(q: Queryable, branchId: string, busin
       status: 'CLOSED',
       closedBy: row.closed_by,
       closedAt: iso(row.closed_at),
+      // Live, outside the frozen copy: collections that arrived after this close (audit H2).
+      postedAfterClose: await postedAfterClose(q, branchId, businessId, day),
     };
   }
 
@@ -68,9 +71,8 @@ export async function branchCloseChecklist(q: Queryable, branchId: string, busin
   const totals = (
     await q.query<{ collected: number; handed: number; paid: number }>(
       `select
-         (select coalesce(sum(c.amount_pesewas), 0)::bigint
-            from collections c join susu_accounts s on s.id = c.susu_account_id join susu_products p on p.id = s.product_id
-           where c.branch_id = $1 and p.business_id = $2 and (c.posted_at at time zone 'UTC')::date = $3::date) as collected,
+         (select coalesce(sum(amount_pesewas), 0)::bigint from collections
+           where branch_id = $1 and business_id = $2 and cash_day = $3::date) as collected,
          (select coalesce(sum(counted_pesewas), 0)::bigint from handovers
            where branch_id = $1 and business_id = $2 and day = $3::date) as handed,
          (select coalesce(sum(amount_pesewas), 0)::bigint from withdrawal_requests
@@ -111,7 +113,42 @@ export async function branchCloseChecklist(q: Queryable, branchId: string, busin
     )
   ).rows[0]!;
 
+  const extra = (
+    await q.query<{
+      carried_count: number;
+      carried_amount: number;
+      off_route_count: number;
+      off_route_amount: number;
+      previous_route_count: number;
+      declarations: number;
+      declared: number;
+    }>(
+      `select
+         (select count(*) from collections where branch_id = $1 and business_id = $2 and cash_day = $3::date and posted_after_close) as carried_count,
+         (select coalesce(sum(amount_pesewas), 0)::bigint from collections
+           where branch_id = $1 and business_id = $2 and cash_day = $3::date and posted_after_close) as carried_amount,
+         (select count(*) from collections where branch_id = $1 and business_id = $2 and cash_day = $3::date and route_status = 'OFF_ROUTE') as off_route_count,
+         (select coalesce(sum(amount_pesewas), 0)::bigint from collections
+           where branch_id = $1 and business_id = $2 and cash_day = $3::date and route_status = 'OFF_ROUTE') as off_route_amount,
+         (select count(*) from collections where branch_id = $1 and business_id = $2 and cash_day = $3::date and route_status = 'PREVIOUS_ROUTE') as previous_route_count,
+         (select count(*) from handover_declaration_lines l join handover_declarations d on d.id = l.declaration_id
+           where d.branch_id = $1 and l.business_id = $2 and l.status = 'DECLARED') as declarations,
+         (select coalesce(sum(l.declared_pesewas), 0)::bigint from handover_declaration_lines l join handover_declarations d on d.id = l.declaration_id
+           where d.branch_id = $1 and l.business_id = $2 and l.status = 'DECLARED') as declared`,
+      [branchId, businessId, day],
+    )
+  ).rows[0]!;
+
   const warnings: string[] = [];
+  if (extra.declarations > 0) {
+    warnings.push(`${plural(extra.declarations, 'handover declaration')} (${formatCedis(extra.declared)}) waiting for a cashier to count`);
+  }
+  if (extra.off_route_count > 0) {
+    warnings.push(`${plural(extra.off_route_count, 'collection')} (${formatCedis(extra.off_route_amount)}) recorded by a pair the account is not assigned to`);
+  }
+  if (extra.carried_count > 0) {
+    warnings.push(`${plural(extra.carried_count, 'collection')} (${formatCedis(extra.carried_amount)}) arrived after the previous close and count today`);
+  }
   for (const p of pairs) {
     if (p.custodyPesewas > 0) warnings.push(`${p.agentPairName} still holds ${formatCedis(p.custodyPesewas)} not handed over`);
     if (p.missingRecordCount > 0) {
@@ -151,10 +188,43 @@ export async function branchCloseChecklist(q: Queryable, branchId: string, busin
     approvedUnpaid: { count: queue.unpaid_count, amountPesewas: queue.unpaid_amount },
     pendingApprovals: queue.pending,
     openCases: queue.open_cases,
+    pendingDeclarations: { count: extra.declarations, declaredPesewas: extra.declared },
+    routeExceptions: {
+      offRouteCount: extra.off_route_count,
+      offRoutePesewas: extra.off_route_amount,
+      previousRouteCount: extra.previous_route_count,
+    },
+    carriedIn: { count: extra.carried_count, amountPesewas: extra.carried_amount },
+    postedAfterClose: { count: 0, amountPesewas: 0, countedOnDay: null },
     warnings,
     closedBy: null,
     closedAt: null,
   };
+}
+
+/** Defaults for closes frozen before these fields existed. */
+const emptyLateFields: Pick<BranchCloseChecklist, 'pendingDeclarations' | 'routeExceptions' | 'carriedIn'> = {
+  pendingDeclarations: { count: 0, declaredPesewas: 0 },
+  routeExceptions: { offRouteCount: 0, offRoutePesewas: 0, previousRouteCount: 0 },
+  carriedIn: { count: 0, amountPesewas: 0 },
+};
+
+/** Collections received after a business's day closed: they count towards the next day (audit H2). */
+async function postedAfterClose(
+  q: Queryable,
+  branchId: string,
+  businessId: string,
+  day: string,
+): Promise<BranchCloseChecklist['postedAfterClose']> {
+  const row = (
+    await q.query<{ count: number; amount: number; counted_on: string | null }>(
+      `select count(*) as count, coalesce(sum(amount_pesewas), 0)::bigint as amount, to_char(min(cash_day), 'YYYY-MM-DD') as counted_on
+         from collections
+        where branch_id = $1 and business_id = $2 and posted_after_close and (posted_at at time zone 'UTC')::date = $3::date`,
+      [branchId, businessId, day],
+    )
+  ).rows[0]!;
+  return { count: row.count, amountPesewas: row.amount, countedOnDay: row.counted_on };
 }
 
 /** Every active business's checklist for one branch day — what the cashier and manager work from. */

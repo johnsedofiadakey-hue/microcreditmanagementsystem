@@ -50,13 +50,16 @@ describe('006_businesses over Step 6 data', () => {
       [branchId, count.rows[0]!.id, JSON.stringify({ branchId, day: '2026-10-19', warnings: [] })],
     );
 
-    expect(await migrate(db)).toEqual(['006_businesses']);
+    expect(await migrate(db, { until: '006_businesses' })).toEqual(['006_businesses']);
 
     const cases = await db.query<{ business_id: string }>('select business_id from cases order by opened_at');
     expect(cases.rows.map((c) => c.business_id)).toEqual([GADUFIA, GADUFIA]);
     expect((await db.query<{ business_id: string }>('select business_id from ledger_accounts')).rows[0]!.business_id).toBe(GADUFIA);
     expect((await db.query<{ business_id: string }>('select business_id from branch_counts')).rows[0]!.business_id).toBe(GADUFIA);
+    // 007 on top: the pre-006 close still reads, with the newer checklist fields defaulted.
+    expect(await migrate(db)).toEqual(['007_cash_controls']);
     const closed = await branchCloseChecklist(db, branchId, GADUFIA, '2026-10-19');
+    expect(closed).toMatchObject({ carriedIn: { count: 0 }, postedAfterClose: { count: 0 }, pendingDeclarations: { count: 0 } });
     expect(closed).toMatchObject({ status: 'CLOSED', businessId: GADUFIA, businessName: 'Gadufia Fiase Susu Services', closedBy: 'manager-1' });
     // The guards are back on after the backfill.
     await expect(db.query(`update cases set summary = 'x' where id = $1`, [open.rows[0]!.id])).rejects.toThrow(/only OPEN/);

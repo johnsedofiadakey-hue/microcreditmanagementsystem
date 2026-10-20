@@ -37,7 +37,7 @@ service cloud.firestore {
     function validCommandEnvelope(d) {
       return d.keys().hasOnly(['type', 'agentUid', 'deviceId', 'seq', 'capturedAt', 'appVersion', 'payload', 'sig'])
         && d.keys().hasAll(['type', 'agentUid', 'deviceId', 'seq', 'capturedAt', 'appVersion', 'payload', 'sig'])
-        && d.type in ['COLLECTION']
+        && d.type in ['COLLECTION', 'HANDOVER_DECLARATION']
         && d.agentUid == request.auth.uid
         && d.deviceId is string && d.deviceId.size() > 0 && d.deviceId.size() <= 128
         && d.seq is int && d.seq >= 1

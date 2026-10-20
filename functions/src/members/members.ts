@@ -10,6 +10,7 @@ import type { Queryable } from '../db/types.js';
 import { ensureLedgerAccount } from '../ledger/accounts.js';
 import type { Actor } from '../lib/actor.js';
 import { writeAudit } from '../lib/audit.js';
+import { requireModule } from '../org/modules.js';
 import { assignCollector } from '../routes/routes.js';
 import { DomainError } from '../lib/errors.js';
 import { requireBranch, requireRole } from '../lib/permissions.js';
@@ -129,6 +130,7 @@ export async function createSusuProduct(
   requireRole(actor, ['SUPER_ADMIN']);
   const business = await tx.query<{ status: string }>('select status from businesses where id = $1', [input.businessId]);
   if (!business.rows[0] || business.rows[0].status !== 'ACTIVE') throw new DomainError('NOT_FOUND', 'Active business not found');
+  await requireModule(tx, input.businessId, 'SUSU');
   // Product codes and versions are per business: each keeps its own catalogue.
   const latest = await tx.query<{ version: number }>(
     'select max(version)::int as version from susu_products where business_id = $1 and code = $2',
@@ -180,6 +182,8 @@ export async function openSusuAccount(
   if (!product.rows[0] || product.rows[0].status !== 'ACTIVE') {
     throw new DomainError('NOT_FOUND', 'Active Susu product not found');
   }
+  // A product made before its business's module was switched off still can't take new accounts (audit M3).
+  await requireModule(tx, product.rows[0].business_id, 'SUSU');
 
   const accountId = (await tx.query<{ id: string }>('select gen_random_uuid() as id')).rows[0]!.id;
   const ledgerAccountId = await ensureLedgerAccount(tx, {

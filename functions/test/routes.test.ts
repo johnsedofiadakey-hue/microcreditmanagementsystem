@@ -29,6 +29,8 @@ async function addPair(branchId: string, a: string, b: string, name: string) {
 beforeEach(async () => {
   db = await freshDatabase();
   seed = await seedBranch(db);
+  // seedBranch puts the account on Pair 1's route; these tests start from an unassigned account.
+  await db.transaction((tx) => unassignCollector(tx, seed.manager, { susuAccountId: seed.susuAccountId }));
   ({ branchId: otherBranchId } = await db.transaction((tx) => createBranch(tx, seed.admin, { name: 'Accra Central', code: 'ACC-01' })));
   otherPairId = await addPair(otherBranchId, 'agent-c', 'agent-d', 'Accra Pair');
 });
@@ -109,11 +111,12 @@ describe('assignCollector', () => {
   });
 
   it('is audited with the previous pair', async () => {
+    const before = (await db.query<{ id: number }>('select coalesce(max(id), 0)::bigint as id from audit_events')).rows[0]!.id;
     await assign(2000);
     await assign(3000);
     const events = await db.query<{ action: string; data: { expectedPesewas: number; previousAgentPairId: string | null } }>(
-      `select action, data from audit_events where entity_id = $1 and action like 'route.%' order by id`,
-      [seed.susuAccountId],
+      `select action, data from audit_events where entity_id = $1 and action like 'route.%' and id > $2 order by id`,
+      [seed.susuAccountId, before],
     );
     expect(events.rows.map((e) => [e.action, e.data.expectedPesewas, e.data.previousAgentPairId])).toEqual([
       ['route.assigned', 2000, null],

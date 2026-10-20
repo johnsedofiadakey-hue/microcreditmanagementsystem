@@ -4,8 +4,8 @@ import { logger } from 'firebase-functions';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { processAgentCommand } from '../commands/processAgentCommand.js';
-import { findUnprocessedCommands } from '../commands/unprocessed.js';
-import { publishSyncHealth } from '../projections/firestore.js';
+import { deviceSeqStates, findUnprocessedCommands, unboundEnrolledDeviceIds } from '../commands/unprocessed.js';
+import { publishHandoverDeclaration, publishSyncHealth } from '../projections/firestore.js';
 import { DATABASE_URL, REGION, SMS_API_KEY, getDatabase } from '../runtime.js';
 import { sendSms } from './sms.js';
 
@@ -55,6 +55,7 @@ async function processAndRecord(
   const deviceId = data?.deviceId;
   if (typeof deviceId === 'string') await publishSyncHealth(getDatabase(), deviceId);
   if (result.status === 'POSTED') await sendReceiptNow(commandId);
+  if (result.status === 'RECORDED') await publishHandoverDeclaration(getDatabase(), result.recordId);
   return result.status;
 }
 
@@ -152,20 +153,44 @@ export const retryFailedCommands = onSchedule(
   },
 );
 
-/** Lost trigger events: the money hasn't moved and the agent's phone still says "waiting for the server". */
-export async function sweepUnprocessedCommands(): Promise<void> {
-  const unprocessed = await findUnprocessedCommands(getFirestore());
-  if (unprocessed.length === 0) return;
-  logger.warn('Commands found unprocessed; their trigger never ran', { count: unprocessed.length, ids: unprocessed.map((c) => c.id) });
+/**
+ * Lost trigger events: the money hasn't moved and the agent's phone still says "waiting for the server".
+ * Found from each device's sequence numbers in Postgres, not the phone's clock (audit M4). Publishes the
+ * count and the oldest one's age for head office, and logs an error when one has waited over an hour.
+ */
+export async function sweepUnprocessedCommands(): Promise<{ found: number; processed: number }> {
+  const db = getDatabase();
+  const firestore = getFirestore();
+  const devices = await deviceSeqStates(db);
+  const unbound = await unboundEnrolledDeviceIds(firestore, devices);
+  const unprocessed = await findUnprocessedCommands(firestore, devices, { unboundDeviceIds: unbound });
+
   let processed = 0;
   for (const command of unprocessed) {
     try {
-      await processAndRecord(getFirestore().collection('commands').doc(command.id), command.id, command.data);
+      await processAndRecord(firestore.collection('commands').doc(command.id), command.id, command.data);
       processed += 1;
     } catch (error) {
       // Left without status, so the next sweep tries again.
       logger.error('Unprocessed command still cannot be processed', { commandId: command.id, error });
     }
   }
-  logger.info('Unprocessed-command sweep finished', { found: unprocessed.length, processed });
+  const oldest = unprocessed[0];
+  if (unprocessed.length > 0) {
+    const ageMinutes = oldest ? Math.round((Date.now() - oldest.createdAtMs) / 60_000) : 0;
+    const log = ageMinutes > 60 ? logger.error : logger.warn;
+    log('Commands found unprocessed; their trigger never ran', { count: unprocessed.length, processed, oldestAgeMinutes: ageMinutes, ids: unprocessed.map((c) => c.id) });
+  }
+  await firestore
+    .collection('dashboards')
+    .doc('company')
+    .collection('live')
+    .doc('commands')
+    .set({
+      unprocessedFound: unprocessed.length,
+      stillUnprocessed: unprocessed.length - processed,
+      oldestUnprocessedCreatedAt: oldest ? new Date(oldest.createdAtMs).toISOString() : null,
+      checkedAt: FieldValue.serverTimestamp(),
+    });
+  return { found: unprocessed.length, processed };
 }

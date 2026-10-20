@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { branchCashDay, closeBranchDay, submitBranchCount } from '../src/cash/close.js';
 import { today } from '../src/cash/common.js';
-import { recordHandover } from '../src/cash/handovers.js';
+import { confirmHandover } from '../src/cash/handovers.js';
 import { approveWithdrawal, payWithdrawal, requestWithdrawal } from '../src/cash/withdrawals.js';
 import { processAgentCommand } from '../src/commands/processAgentCommand.js';
 import type { Database } from '../src/db/types.js';
@@ -11,7 +11,9 @@ import { findBalanceMismatches } from '../src/ledger/reconcile.js';
 import { createSusuProduct, openSusuAccount } from '../src/members/members.js';
 import { getMember } from '../src/reads/members.js';
 import { listBusinesses } from '../src/reads/org.js';
-import { GADUFIA, OPWS, STF, actor, freshDatabase, seedBranch, signedCollection } from './helpers.js';
+import { setBusinessModule } from '../src/org/modules.js';
+import { assignCollector } from '../src/routes/routes.js';
+import { GADUFIA, OPWS, STF, actor, freshDatabase, seedBranch, signedCollection, signedDeclaration } from './helpers.js';
 
 let db: Database;
 let seed: Awaited<ReturnType<typeof seedBranch>>;
@@ -24,12 +26,17 @@ beforeEach(async () => {
   db = await freshDatabase();
   seed = await seedBranch(db);
   seq = 0;
+  // Only Gadufia's Susu is live in Stage 1 (audit M3); these tests switch OPWS on to prove separation.
+  await db.transaction((tx) => setBusinessModule(tx, seed.admin, { businessId: OPWS, module: 'SUSU', enabled: true, reason: 'Separation test' }));
   const { productId } = await db.transaction((tx) =>
     createSusuProduct(tx, seed.admin, { businessId: OPWS, code: 'DAILY', name: 'Welfare contribution', frequency: 'DAILY' }),
   );
   ({ susuAccountId: welfareAccountId } = await db.transaction((tx) =>
     openSusuAccount(tx, seed.manager, { memberId: seed.memberId, productId }),
   ));
+  await db.transaction((tx) =>
+    assignCollector(tx, seed.manager, { susuAccountId: welfareAccountId, agentPairId: seed.agentPairId, expectedPesewas: 500 }),
+  );
 });
 
 afterEach(async () => {
@@ -48,8 +55,12 @@ const balance = async (kind: Parameters<typeof findLedgerAccountId>[1], ownerId:
 };
 const custody = (businessId: string) => balance('AGENT_CASH_CUSTODY', seed.agentPairId, businessId);
 const vault = (businessId: string) => balance('BRANCH_CASH', seed.branchId, businessId);
-const handover = (businessId: string, expectedPesewas: number, countedPesewas = expectedPesewas) =>
-  db.transaction((tx) => recordHandover(tx, seed.cashier, { agentPairId: seed.agentPairId, businessId, expectedPesewas, countedPesewas }));
+async function handover(businessId: string, expectedPesewas: number, countedPesewas = expectedPesewas) {
+  seq += 1;
+  const d = signedDeclaration(seed.key, { seq, lines: [{ businessId, declaredPesewas: Math.max(countedPesewas, 1) }] });
+  expect((await processAgentCommand(db, d.id, d.body)).status).toBe('RECORDED');
+  return db.transaction((tx) => confirmHandover(tx, seed.cashier, { declarationId: d.id, businessId, expectedPesewas, countedPesewas }));
+}
 
 describe('three businesses on one platform (ADR-001)', () => {
   it('lists the client’s three businesses with their SMS identities', async () => {

@@ -76,6 +76,14 @@ export async function assignCollector(tx: Queryable, actor: Actor, input: Assign
             assigned_by = excluded.assigned_by`,
     [input.susuAccountId, input.agentPairId, input.expectedPesewas, actor.uid],
   );
+  // Route history (audit H1): a new period whenever the collecting pair changes.
+  if (account.previous_pair_id !== input.agentPairId) {
+    await endRoutePeriod(tx, input.susuAccountId, actor.uid);
+    await tx.query(
+      `insert into route_assignment_periods (susu_account_id, agent_pair_id, started_by) values ($1, $2, $3)`,
+      [input.susuAccountId, input.agentPairId, actor.uid],
+    );
+  }
   await writeAudit(tx, {
     actorUid: actor.uid,
     action: 'route.assigned',
@@ -96,6 +104,7 @@ export async function unassignCollector(tx: Queryable, actor: Actor, input: Unas
   if (!account.previous_pair_id) throw new DomainError('NOT_FOUND', 'This account is not on any route');
 
   await tx.query('delete from route_assignments where susu_account_id = $1', [input.susuAccountId]);
+  await endRoutePeriod(tx, input.susuAccountId, actor.uid);
   await writeAudit(tx, {
     actorUid: actor.uid,
     action: 'route.unassigned',
@@ -106,6 +115,45 @@ export async function unassignCollector(tx: Queryable, actor: Actor, input: Unas
     data: { previousAgentPairId: account.previous_pair_id },
   });
   return { affectedPairIds: [account.previous_pair_id] };
+}
+
+async function endRoutePeriod(tx: Queryable, susuAccountId: string, actorUid: string): Promise<void> {
+  await tx.query(
+    `update route_assignment_periods set ended_at = now(), ended_by = $2 where susu_account_id = $1 and ended_at is null`,
+    [susuAccountId, actorUid],
+  );
+}
+
+/**
+ * How long after an account leaves a pair's route that pair's offline collections captured before the
+ * change still count as on-route (audit H1). Phones sync at least daily; 72 h covers a weekend.
+ */
+export const PREVIOUS_ROUTE_GRACE_HOURS = 72;
+
+export type RouteStatus = 'ON_ROUTE' | 'PREVIOUS_ROUTE' | 'OFF_ROUTE';
+
+/**
+ * Was this account on the collecting pair's route? ON_ROUTE: assigned to the pair now. PREVIOUS_ROUTE:
+ * the pair held it until a reassignment less than PREVIOUS_ROUTE_GRACE_HOURS ago (server time) and the
+ * phone captured the collection before that change. Anything else is OFF_ROUTE.
+ */
+export async function routeStatusFor(
+  tx: Queryable,
+  input: { susuAccountId: string; agentPairId: string; capturedAt: string },
+): Promise<RouteStatus> {
+  const current = await tx.query<{ agent_pair_id: string }>('select agent_pair_id from route_assignments where susu_account_id = $1', [
+    input.susuAccountId,
+  ]);
+  if (current.rows[0]?.agent_pair_id === input.agentPairId) return 'ON_ROUTE';
+  const previous = await tx.query(
+    `select 1 from route_assignment_periods
+      where susu_account_id = $1 and agent_pair_id = $2 and ended_at is not null
+        and ended_at >= now() - make_interval(hours => $3)
+        and $4::timestamptz <= ended_at
+      limit 1`,
+    [input.susuAccountId, input.agentPairId, PREVIOUS_ROUTE_GRACE_HOURS, input.capturedAt],
+  );
+  return previous.rowCount > 0 ? 'PREVIOUS_ROUTE' : 'OFF_ROUTE';
 }
 
 export interface PairRoute {

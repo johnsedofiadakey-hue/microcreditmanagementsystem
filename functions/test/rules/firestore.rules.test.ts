@@ -80,6 +80,12 @@ describe('commands/{id} — the agent offline queue', () => {
     await assertFails(setDoc(doc(agent(), 'commands', COMMAND_ID), command({ type: 'PAYOUT' })));
   });
 
+  it('a handover declaration is a command like any other (audit H3)', async () => {
+    const declaration = command({ type: 'HANDOVER_DECLARATION', payload: { lines: [{ businessId: 'b', declaredPesewas: 5000 }] } });
+    await assertSucceeds(setDoc(doc(agent(), 'commands', COMMAND_ID), declaration));
+    await assertFails(setDoc(doc(agent(), 'commands', '3f2504e0-4f89-41d3-9a0c-0305e82c3302'), { ...declaration, status: 'RECORDED' }));
+  });
+
   it('a command cannot be edited or deleted once written', async () => {
     await assertSucceeds(setDoc(doc(agent(), 'commands', COMMAND_ID), command()));
     await assertFails(updateDoc(doc(agent(), 'commands', COMMAND_ID), { seq: 2 }));
@@ -148,6 +154,12 @@ describe('projections are read-only and scoped', () => {
     await assertSucceeds(getDoc(doc(agent(), 'agentPairs', PAIR, 'routes', 'today')));
     await assertFails(getDoc(doc(otherAgent(), 'agentPairs', PAIR, 'routes', 'today')));
     await assertFails(setDoc(doc(agent(), 'agentPairs', PAIR, 'routes', 'today'), { x: 1 }));
+  });
+
+  it('handover results: the pair reads its own, nobody writes (audit H3)', async () => {
+    await assertSucceeds(getDoc(doc(agent(), 'agentPairs', PAIR, 'handovers', COMMAND_ID)));
+    await assertFails(getDoc(doc(otherAgent(), 'agentPairs', PAIR, 'handovers', COMMAND_ID)));
+    await assertFails(setDoc(doc(agent(), 'agentPairs', PAIR, 'handovers', COMMAND_ID), { lines: [] }));
   });
 
   it('member snapshots: only the pair’s agents read them; staff and other pairs cannot', async () => {

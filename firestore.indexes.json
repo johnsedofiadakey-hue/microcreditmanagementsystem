@@ -7,6 +7,14 @@
         { "fieldPath": "agentUid", "order": "ASCENDING" },
         { "fieldPath": "seq", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "commands",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "deviceId", "order": "ASCENDING" },
+        { "fieldPath": "seq", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

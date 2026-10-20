@@ -24,34 +24,81 @@ const note = z.string().trim().max(500).optional();
 
 // ── Handover ──
 
-export const recordHandoverRequestSchema = z
+/**
+ * Two parties (audit H3): the agent pair declares per-business amounts from the phone
+ * (`HANDOVER_DECLARATION` command, API.md §3), then a cashier who is not one of the pair's agents
+ * counts and confirms each business line. There is no cashier-only handover.
+ */
+export const confirmHandoverRequestSchema = z
   .object({
-    agentPairId: z.uuid(),
-    /** Each business's cash is handed over separately (ADR-001). */
+    declarationId: z.uuid(),
     businessId: z.uuid(),
-    /** What the cashier saw as expected when counting; refused with CONFLICT if it has changed since. */
+    /** The pair's custody for this business as the cashier saw it; EXPECTED_CASH_CHANGED if it moved since. */
     expectedPesewas: pesewasSchema,
     countedPesewas: pesewasSchema,
     note,
   })
   .strict();
-export type RecordHandoverRequest = z.infer<typeof recordHandoverRequestSchema>;
+export type ConfirmHandoverRequest = z.infer<typeof confirmHandoverRequestSchema>;
 
 export interface HandoverResult {
   handoverId: string;
-  /** counted − expected: negative is a shortage, positive an overage. */
+  /** counted − expected custody: negative is a shortage (posted to variance). */
   differencePesewas: number;
-  /** Opened when the difference isn't zero. */
+  /** counted − what the agents declared. */
+  declarationDifferencePesewas: number;
+  /** Opened when either difference isn't zero. */
   caseId: string | null;
 }
 
+export const DECLARATION_LINE_STATUSES = ['DECLARED', 'CONFIRMED', 'SUPERSEDED'] as const;
+export type DeclarationLineStatus = (typeof DECLARATION_LINE_STATUSES)[number];
+
+export interface HandoverDeclarationLine {
+  businessId: string;
+  businessName: string;
+  declaredPesewas: number;
+  /** The pair's custody for this business when the server received the declaration (evidence). */
+  custodyAtDeclarationPesewas: number;
+  /** The pair's custody now: what `confirmHandover.expectedPesewas` must be. Only for DECLARED lines. */
+  currentCustodyPesewas: number | null;
+  status: DeclarationLineStatus;
+  handoverId: string | null;
+  countedPesewas: number | null;
+  confirmedBy: string | null;
+  confirmedAt: string | null;
+}
+
+export interface HandoverDeclarationSummary {
+  id: string;
+  branchId: string;
+  agentPairId: string;
+  agentPairName: string;
+  agentUid: string;
+  deviceId: string;
+  /** Phone clock (evidence) and server receipt time (official). */
+  capturedAt: string;
+  receivedAt: string;
+  lines: HandoverDeclarationLine[];
+}
+
+const cursor = z.string().max(400).nullish();
+const limit = z.int().min(1).max(200).optional();
+
+export const listHandoverDeclarationsRequestSchema = z
+  .object({ branchId: z.uuid().optional(), status: z.enum(['OPEN', 'ALL']).default('OPEN'), cursor, limit })
+  .strict();
+
 export const listHandoversRequestSchema = z
-  .object({ branchId: z.uuid().optional(), businessId: z.uuid().optional(), day: branchDaySchema.optional() })
+  .object({ branchId: z.uuid().optional(), businessId: z.uuid().optional(), day: branchDaySchema.optional(), cursor, limit })
   .strict();
 export interface HandoverSummary {
   id: string;
   branchId: string;
   businessId: string;
+  declarationId: string | null;
+  /** What the agents declared for this business; null for handovers recorded before audit H3. */
+  declaredPesewas: number | null;
   agentPairId: string;
   agentPairName: string;
   day: string;
@@ -86,7 +133,13 @@ export const rejectWithdrawalRequestSchema = z.object({ withdrawalId: z.uuid(), 
 export type RejectWithdrawalRequest = z.infer<typeof rejectWithdrawalRequestSchema>;
 
 export const listWithdrawalsRequestSchema = z
-  .object({ branchId: z.uuid().optional(), businessId: z.uuid().optional(), status: z.enum(WITHDRAWAL_STATUSES).optional() })
+  .object({
+    branchId: z.uuid().optional(),
+    businessId: z.uuid().optional(),
+    status: z.enum(WITHDRAWAL_STATUSES).optional(),
+    cursor,
+    limit,
+  })
   .strict();
 export interface WithdrawalSummary {
   id: string;
@@ -113,14 +166,19 @@ export interface WithdrawalSummary {
 
 // ── Cases (differences and other exceptions that need a person) ──
 
-export const CASE_KINDS = ['HANDOVER_DIFFERENCE', 'CLOSE_DIFFERENCE'] as const;
+/**
+ * HANDOVER_DIFFERENCE: counted ≠ expected custody (posted to variance). HANDOVER_DISPUTE: counted ≠ the
+ * agents' declaration while matching custody. OFF_ROUTE_COLLECTION: posted by a pair the account is
+ * not assigned to (audit H1). CLOSE_DIFFERENCE: vault count ≠ expected at close.
+ */
+export const CASE_KINDS = ['HANDOVER_DIFFERENCE', 'HANDOVER_DISPUTE', 'CLOSE_DIFFERENCE', 'OFF_ROUTE_COLLECTION'] as const;
 export type CaseKind = (typeof CASE_KINDS)[number];
 
 export const resolveCaseRequestSchema = z.object({ caseId: z.uuid(), resolution: reason }).strict();
 export type ResolveCaseRequest = z.infer<typeof resolveCaseRequestSchema>;
 
 export const listCasesRequestSchema = z
-  .object({ branchId: z.uuid().optional(), businessId: z.uuid().optional(), status: z.enum(['OPEN', 'RESOLVED']).optional() })
+  .object({ branchId: z.uuid().optional(), businessId: z.uuid().optional(), status: z.enum(['OPEN', 'RESOLVED']).optional(), cursor, limit })
   .strict();
 export interface CaseSummary {
   id: string;
@@ -181,6 +239,17 @@ export interface BranchCloseChecklist {
   approvedUnpaid: { count: number; amountPesewas: number };
   pendingApprovals: number;
   openCases: number;
+  /** Handover declarations from this business's agents waiting for a cashier. */
+  pendingDeclarations: { count: number; declaredPesewas: number };
+  /** Collections counted on this day that were recorded off route or under a previous route (audit H1). */
+  routeExceptions: { offRouteCount: number; offRoutePesewas: number; previousRouteCount: number };
+  /** Collections that arrived after the previous day's close and count here instead (audit H2). */
+  carriedIn: { count: number; amountPesewas: number };
+  /**
+   * Collections received after THIS day closed; they count towards the next day. Live, never part of
+   * the frozen close. Always zero while the day is open.
+   */
+  postedAfterClose: { count: number; amountPesewas: number; countedOnDay: string | null };
   /** Things the manager confirms they have seen; none of them blocks the close. */
   warnings: string[];
   closedBy: string | null;

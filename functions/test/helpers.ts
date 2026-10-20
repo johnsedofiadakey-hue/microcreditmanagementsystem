@@ -10,6 +10,7 @@ import { createAgentPair } from '../src/org/agentPairs.js';
 import { createBranch } from '../src/org/branches.js';
 import { bindDevice, type EnrollmentRecord } from '../src/org/devices.js';
 import { recordStaffUser } from '../src/org/staff.js';
+import { assignCollector } from '../src/routes/routes.js';
 
 /** The seeded product's business: all existing Susu belongs to Gadufia Fiase Susu Services. */
 export const GADUFIA = BUSINESS_IDS.GADUFIA;
@@ -89,6 +90,10 @@ export async function seedBranch(db: Database) {
   );
 
   const member = await addActiveMember(db, branchId, cashier, manager, productId);
+  // On Pair 1's route, as a real account must be for a normal (ON_ROUTE) collection (audit H1).
+  await db.transaction((tx) =>
+    assignCollector(tx, manager, { susuAccountId: member.susuAccountId, agentPairId, expectedPesewas: 2_000 }),
+  );
 
   return { admin, manager, cashier, branchId, businessId: GADUFIA, agentPairId, deviceId, key, productId, ...member };
 }
@@ -120,6 +125,7 @@ export function signedCollection(
     deviceId?: string;
     agentUid?: string;
     id?: string;
+    capturedAt?: string;
   },
 ) {
   const id = overrides.id ?? randomUUID();
@@ -128,7 +134,7 @@ export function signedCollection(
     agentUid: overrides.agentUid ?? 'agent-a',
     deviceId: overrides.deviceId ?? 'device-a',
     seq: overrides.seq ?? 1,
-    capturedAt: '2026-10-18T09:15:00+00:00',
+    capturedAt: overrides.capturedAt ?? '2026-10-18T09:15:00+00:00',
     appVersion: '0.1.0',
     payload: {
       memberId: overrides.memberId,
@@ -144,3 +150,32 @@ export function signedCollection(
 }
 
 export { randomUUID };
+
+/** A HANDOVER_DECLARATION signed with `key`, as the agent app builds it (audit H3). */
+export function signedDeclaration(
+  key: PhoneKey,
+  overrides: {
+    lines: { businessId: string; declaredPesewas: number }[];
+    seq: number;
+    deviceId?: string;
+    agentUid?: string;
+    id?: string;
+    capturedAt?: string;
+  },
+) {
+  const id = overrides.id ?? randomUUID();
+  const body = {
+    type: 'HANDOVER_DECLARATION' as const,
+    agentUid: overrides.agentUid ?? 'agent-a',
+    deviceId: overrides.deviceId ?? 'device-a',
+    seq: overrides.seq,
+    capturedAt: overrides.capturedAt ?? '2026-10-18T17:30:00Z',
+    appVersion: '0.1.0',
+    payload: { lines: overrides.lines },
+  };
+  const sig = sign('sha256', Buffer.from(commandSigningString(id, body), 'utf8'), {
+    key: key.privateKey,
+    dsaEncoding: 'der',
+  }).toString('base64');
+  return { id, body: { ...body, sig } };
+}

@@ -151,7 +151,7 @@ describe('getMember', () => {
         productName: 'Daily Susu',
         balancePesewas: 2_500,
         status: 'ACTIVE',
-        collector: null,
+        collector: { agentPairId: seed.agentPairId, agentPairName: 'Pair 1', expectedPesewas: 2_000 },
       },
     ]);
   });

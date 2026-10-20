@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveCase } from '../src/cash/cases.js';
 import { branchCloseChecklist, closeBranchDay, submitBranchCount } from '../src/cash/close.js';
 import { today } from '../src/cash/common.js';
-import { recordHandover } from '../src/cash/handovers.js';
+import { confirmHandover } from '../src/cash/handovers.js';
 import { getBranchClose, listCases, listHandovers, listWithdrawals } from '../src/cash/reads.js';
 import { approveWithdrawal, payWithdrawal, rejectWithdrawal, requestWithdrawal } from '../src/cash/withdrawals.js';
 import { processAgentCommand } from '../src/commands/processAgentCommand.js';
@@ -11,7 +11,7 @@ import type { Database } from '../src/db/types.js';
 import { findLedgerAccountId, getBalance } from '../src/ledger/accounts.js';
 import { findBalanceMismatches } from '../src/ledger/reconcile.js';
 import { createBranch } from '../src/org/branches.js';
-import { actor, freshDatabase, seedBranch, signedCollection } from './helpers.js';
+import { actor, freshDatabase, seedBranch, signedCollection, signedDeclaration } from './helpers.js';
 
 let db: Database;
 let seed: Awaited<ReturnType<typeof seedBranch>>;
@@ -43,8 +43,20 @@ const branchCash = () => balance('BRANCH_CASH', seed.branchId);
 const variance = () => balance('BRANCH_CASH_VARIANCE', seed.branchId);
 const member = () => balance('MEMBER_SUSU', seed.susuAccountId);
 
-const handover = (expectedPesewas: number, countedPesewas: number, who = seed.cashier) =>
-  db.transaction((tx) => recordHandover(tx, who, { agentPairId: seed.agentPairId, businessId: seed.businessId, expectedPesewas, countedPesewas }));
+/** The agents declare from the phone (signed command), then `who` counts and confirms (audit H3). */
+async function declare(declaredPesewas: number) {
+  seq += 1;
+  const d = signedDeclaration(seed.key, { seq, lines: [{ businessId: seed.businessId, declaredPesewas }] });
+  const result = await processAgentCommand(db, d.id, d.body);
+  expect(result.status).toBe('RECORDED');
+  return d.id;
+}
+async function handover(expectedPesewas: number, countedPesewas: number, who = seed.cashier, declaredPesewas = countedPesewas) {
+  const declarationId = await declare(Math.max(declaredPesewas, 1));
+  return db.transaction((tx) =>
+    confirmHandover(tx, who, { declarationId, businessId: seed.businessId, expectedPesewas, countedPesewas }),
+  );
+}
 const request = (amountPesewas: number, who = seed.cashier) =>
   db.transaction((tx) => requestWithdrawal(tx, who, { susuAccountId: seed.susuAccountId, amountPesewas, reason: 'School fees' }));
 const approve = (withdrawalId: string, who = seed.manager) => db.transaction((tx) => approveWithdrawal(tx, who, { withdrawalId }));
@@ -103,10 +115,11 @@ describe('a full branch day (BUILD_PLAN Step 6 “done when”)', () => {
 
     expect(await findBalanceMismatches(db)).toEqual([]);
     const actions = await db.query<{ action: string }>(
-      `select action from audit_events where action in ('handover.recorded','withdrawal.requested','withdrawal.approved','withdrawal.paid','branch.counted','branch.closed') order by id`,
+      `select action from audit_events where action in ('handover.declared','handover.confirmed','withdrawal.requested','withdrawal.approved','withdrawal.paid','branch.counted','branch.closed') order by id`,
     );
     expect(actions.rows.map((r) => r.action)).toEqual([
-      'handover.recorded',
+      'handover.declared',
+      'handover.confirmed',
       'withdrawal.requested',
       'withdrawal.approved',
       'withdrawal.paid',

@@ -104,8 +104,9 @@ export async function listSusuProducts(q: Queryable, actor: Actor): Promise<{ pr
 export async function listBusinesses(q: Queryable, actor: Actor): Promise<{ businesses: BusinessSummary[] }> {
   requireRole(actor, STAFF_READERS);
   const result = await q.query<BusinessSummary>(
-    `select id, code, name, sms_brand as "smsBrand", sms_sender_id as "smsSenderId", address, status
-       from businesses order by code`,
+    `select b.id, b.code, b.name, b.sms_brand as "smsBrand", b.sms_sender_id as "smsSenderId", b.address, b.status,
+            coalesce(array(select m.module from business_modules m where m.business_id = b.id and m.enabled order by m.module), '{}') as "enabledModules"
+       from businesses b order by b.code`,
   );
   return { businesses: result.rows };
 }

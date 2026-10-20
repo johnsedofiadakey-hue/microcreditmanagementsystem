@@ -3,6 +3,7 @@ import { logger } from 'firebase-functions';
 import type { Queryable } from '../db/types.js';
 import { routeDayKey } from '@susu/shared';
 import { deviceStatusDocs, pairSyncHealthForDevice } from '../reads/syncHealth.js';
+import { getHandoverDeclaration } from '../cash/handovers.js';
 import { buildPairRoute } from '../routes/routes.js';
 
 /**
@@ -81,4 +82,38 @@ export async function publishRoutes(q: Queryable, agentPairIds: string[], day: s
     }
   }
   return failed;
+}
+
+/**
+ * `agentPairs/{agentPairId}/handovers/{declarationId}` — the agents see their declaration and, per
+ * business, the cashier's count and any difference (audit H3). Rewritten after the declaration and
+ * after every confirmation; best-effort like every projection.
+ */
+export async function publishHandoverDeclaration(q: Queryable, declarationId: string): Promise<void> {
+  try {
+    const declaration = await getHandoverDeclaration(q, declarationId);
+    if (!declaration) return;
+    await getFirestore()
+      .collection('agentPairs')
+      .doc(declaration.agentPairId)
+      .collection('handovers')
+      .doc(declarationId)
+      .set({
+        receivedAt: declaration.receivedAt,
+        capturedAt: declaration.capturedAt,
+        agentUid: declaration.agentUid,
+        lines: declaration.lines.map((l) => ({
+          businessId: l.businessId,
+          businessName: l.businessName,
+          declaredPesewas: l.declaredPesewas,
+          status: l.status,
+          countedPesewas: l.countedPesewas,
+          differencePesewas: l.countedPesewas === null ? null : l.countedPesewas - l.declaredPesewas,
+          confirmedAt: l.confirmedAt,
+        })),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+  } catch (error) {
+    logger.error('Could not publish handover declaration', { declarationId, error });
+  }
 }
