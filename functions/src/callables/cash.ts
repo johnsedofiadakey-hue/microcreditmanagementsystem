@@ -14,10 +14,12 @@ import {
   submitBranchCountRequestSchema,
 } from '@susu/shared';
 import { logger } from 'firebase-functions';
+import type { Database } from '../db/types.js';
 import { resolveCase } from '../cash/cases.js';
 import { closeBranchDay, submitBranchCount } from '../cash/close.js';
 import { confirmHandover, listHandoverDeclarations } from '../cash/handovers.js';
-import { publishHandoverDeclaration } from '../projections/firestore.js';
+import { publishBranchAndCompanyDay, publishBranchDay, publishHandoverDeclaration } from '../projections/firestore.js';
+import { branchOfRecord } from '../reads/dashboards.js';
 import { getBranchCashDay, getBranchClose, listCases, listHandovers, listWithdrawals } from '../cash/reads.js';
 import { approveWithdrawal, payWithdrawal, rejectWithdrawal, requestWithdrawal } from '../cash/withdrawals.js';
 import { SMS_API_KEY, getDatabase } from '../runtime.js';
@@ -29,6 +31,7 @@ export const confirmHandoverFn = staffCallable(confirmHandoverRequestSchema, asy
   const result = await db.transaction((tx) => confirmHandover(tx, actor, input));
   // The agents see the cashier's count on their phone.
   await publishHandoverDeclaration(db, input.declarationId);
+  await refreshBranchDay(db, 'declaration', input.declarationId);
   return result;
 });
 export const listHandoverDeclarationsFn = staffCallable(listHandoverDeclarationsRequestSchema, ({ db, actor, input }) =>
@@ -57,6 +60,7 @@ export const payWithdrawalFn = staffCallable(
     } catch (error) {
       logger.warn('Immediate withdrawal receipt failed; the outbox sweep will retry', { withdrawalId: input.withdrawalId, error });
     }
+    await refreshBranchDay(db, 'withdrawal', input.withdrawalId);
     return result;
   },
   { secrets: [SMS_API_KEY] },
@@ -69,11 +73,20 @@ export const getBranchCashDayFn = staffCallable(getBranchCashDayRequestSchema, (
 export const submitBranchCountFn = staffCallable(submitBranchCountRequestSchema, ({ db, actor, input }) =>
   db.transaction((tx) => submitBranchCount(tx, actor, input)),
 );
-export const closeBranchDayFn = staffCallable(closeBranchDayRequestSchema, ({ db, actor, input }) =>
-  db.transaction((tx) => closeBranchDay(tx, actor, input)),
-);
+export const closeBranchDayFn = staffCallable(closeBranchDayRequestSchema, async ({ db, actor, input }) => {
+  const result = await db.transaction((tx) => closeBranchDay(tx, actor, input));
+  await publishBranchAndCompanyDay(db, input.branchId, input.day);
+  return result;
+});
 export const listCasesFn = staffCallable(listCasesRequestSchema, ({ db, actor, input }) => listCases(db, actor, input));
 export const resolveCaseFn = staffCallable(resolveCaseRequestSchema, async ({ db, actor, input }) => {
   await db.transaction((tx) => resolveCase(tx, actor, input));
+  await refreshBranchDay(db, 'case', input.caseId);
   return null;
 });
+
+/** Best-effort: today's dashboard for the branch a record belongs to. */
+async function refreshBranchDay(db: Database, kind: 'withdrawal' | 'declaration' | 'case', id: string): Promise<void> {
+  const branchId = await branchOfRecord(db, kind, id).catch(() => null);
+  if (branchId) await publishBranchDay(db, branchId);
+}

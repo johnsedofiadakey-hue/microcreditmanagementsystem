@@ -5,7 +5,8 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { processAgentCommand } from '../commands/processAgentCommand.js';
 import { deviceSeqStates, findUnprocessedCommands, unboundEnrolledDeviceIds } from '../commands/unprocessed.js';
-import { publishHandoverDeclaration, publishSyncHealth } from '../projections/firestore.js';
+import { publishBranchDay, publishHandoverDeclaration, publishSyncHealth } from '../projections/firestore.js';
+import { collectionDay } from '../reads/dashboards.js';
 import { DATABASE_URL, REGION, SMS_API_KEY, getDatabase } from '../runtime.js';
 import { sendSms } from './sms.js';
 
@@ -54,7 +55,12 @@ async function processAndRecord(
   await ref.update({ ...result, processedAt: FieldValue.serverTimestamp() });
   const deviceId = data?.deviceId;
   if (typeof deviceId === 'string') await publishSyncHealth(getDatabase(), deviceId);
-  if (result.status === 'POSTED') await sendReceiptNow(commandId);
+  if (result.status === 'POSTED') {
+    await sendReceiptNow(commandId);
+    // Live branch figures, for the day the collection counts towards (the company roll-up follows on its schedule).
+    const counted = await collectionDay(getDatabase(), commandId).catch(() => null);
+    if (counted) await publishBranchDay(getDatabase(), counted.branchId, counted.day);
+  }
   if (result.status === 'RECORDED') await publishHandoverDeclaration(getDatabase(), result.recordId);
   return result.status;
 }

@@ -5,6 +5,7 @@ export * from './canonical';
 export * from './commands';
 export * from './requests';
 export * from './reads';
+export * from './bank';
 export * from './errors';
 export * from './routes';
 export * from './cash';

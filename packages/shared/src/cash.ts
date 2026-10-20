@@ -171,7 +171,7 @@ export interface WithdrawalSummary {
  * agents' declaration while matching custody. OFF_ROUTE_COLLECTION: posted by a pair the account is
  * not assigned to (audit H1). CLOSE_DIFFERENCE: vault count ≠ expected at close.
  */
-export const CASE_KINDS = ['HANDOVER_DIFFERENCE', 'HANDOVER_DISPUTE', 'CLOSE_DIFFERENCE', 'OFF_ROUTE_COLLECTION'] as const;
+export const CASE_KINDS = ['HANDOVER_DIFFERENCE', 'HANDOVER_DISPUTE', 'CLOSE_DIFFERENCE', 'OFF_ROUTE_COLLECTION', 'DEPOSIT_DIFFERENCE'] as const;
 export type CaseKind = (typeof CASE_KINDS)[number];
 
 export const resolveCaseRequestSchema = z.object({ caseId: z.uuid(), resolution: reason }).strict();

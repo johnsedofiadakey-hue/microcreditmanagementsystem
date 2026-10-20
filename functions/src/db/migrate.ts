@@ -6,6 +6,7 @@ import { migration004OutboxDispatch } from './migrations/004_outbox_dispatch.js'
 import { migration005Cash } from './migrations/005_cash.js';
 import { migration006Businesses } from './migrations/006_businesses.js';
 import { migration007CashControls } from './migrations/007_cash_controls.js';
+import { migration008Bank } from './migrations/008_bank.js';
 
 export interface Migration {
   id: string;
@@ -13,7 +14,7 @@ export interface Migration {
 }
 
 /** Ordered list. Never edit a migration that has run anywhere; add a new one. */
-export const MIGRATIONS: readonly Migration[] = [migration001Core, migration002Hardening, migration003Routes, migration004OutboxDispatch, migration005Cash, migration006Businesses, migration007CashControls];
+export const MIGRATIONS: readonly Migration[] = [migration001Core, migration002Hardening, migration003Routes, migration004OutboxDispatch, migration005Cash, migration006Businesses, migration007CashControls, migration008Bank];
 
 /** `until`: stop after this migration (tests that check a migration against data from earlier ones). */
 export async function migrate(db: Database, options: { until?: string } = {}): Promise<string[]> {

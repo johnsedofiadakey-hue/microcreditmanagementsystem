@@ -52,3 +52,14 @@ export { onAgentCommandCreated, retryFailedCommands } from './triggers/agentComm
 export { reconcileBalances } from './triggers/reconcile.js';
 export { publishDailyRoutes } from './triggers/routes.js';
 export { dispatchSmsOutboxJob as dispatchSmsOutbox } from './triggers/sms.js';
+export {
+  createBankAccountFn as createBankAccount,
+  ignoreBankStatementLineFn as ignoreBankStatementLine,
+  importBankStatementFn as importBankStatement,
+  listBankAccountsFn as listBankAccounts,
+  listBankDepositsFn as listBankDeposits,
+  listBankStatementLinesFn as listBankStatementLines,
+  matchBankDepositFn as matchBankDeposit,
+  recordBankDepositFn as recordBankDeposit,
+} from './callables/bank.js';
+export { publishDayDashboards } from './triggers/dashboards.js';

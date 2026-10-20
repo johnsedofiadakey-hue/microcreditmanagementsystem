@@ -5,7 +5,9 @@ export type LedgerAccountKind =
   | 'AGENT_CASH_CUSTODY'
   | 'BRANCH_CASH'
   | 'BRANCH_CASH_VARIANCE'
-  | 'OPENING_BALANCE_EQUITY';
+  | 'OPENING_BALANCE_EQUITY'
+  | 'CASH_IN_TRANSIT'
+  | 'BANK';
 
 type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
 type Side = 'DEBIT' | 'CREDIT';
@@ -31,6 +33,10 @@ export const ACCOUNT_KINDS: Record<LedgerAccountKind, AccountKindDefinition> = {
   BRANCH_CASH_VARIANCE: { accountType: 'EXPENSE', normalSide: 'DEBIT', allowNegative: true },
   // Counterpart for balances migrated from the client's previous records.
   OPENING_BALANCE_EQUITY: { accountType: 'EQUITY', normalSide: 'CREDIT', allowNegative: true },
+  // Cash taken from a branch vault to the bank, until the bank statement shows it arrived (Step 7).
+  CASH_IN_TRANSIT: { accountType: 'ASSET', normalSide: 'DEBIT', allowNegative: false },
+  // A business's bank account, moved only by matched statement lines (Step 7).
+  BANK: { accountType: 'ASSET', normalSide: 'DEBIT', allowNegative: false },
 };
 
 export interface EnsureAccountInput {
@@ -96,7 +102,7 @@ export async function getBalance(tx: Queryable, accountId: string): Promise<numb
   return result.rows[0].balance_pesewas;
 }
 
-type CashKind = 'AGENT_CASH_CUSTODY' | 'BRANCH_CASH' | 'BRANCH_CASH_VARIANCE';
+type CashKind = 'AGENT_CASH_CUSTODY' | 'BRANCH_CASH' | 'BRANCH_CASH_VARIANCE' | 'CASH_IN_TRANSIT';
 
 /**
  * The cash account of a pair (custody) or branch (vault, variance) for one business, created on first
@@ -112,7 +118,8 @@ export async function ensureCashAccount(tx: Queryable, kind: CashKind, ownerId: 
   if (!owner) throw new Error(`No owner ${ownerId} for a ${kind} account`);
   const business = (await tx.query<{ code: string }>('select code from businesses where id = $1', [businessId])).rows[0];
   if (!business) throw new Error(`Unknown business ${businessId}`);
-  const label = kind === 'AGENT_CASH_CUSTODY' ? 'cash custody' : kind === 'BRANCH_CASH' ? 'cash' : 'cash variance';
+  const label =
+    kind === 'AGENT_CASH_CUSTODY' ? 'cash custody' : kind === 'BRANCH_CASH' ? 'cash' : kind === 'CASH_IN_TRANSIT' ? 'cash in transit to bank' : 'cash variance';
   return ensureLedgerAccount(tx, { kind, ownerId, branchId: owner.branch_id, businessId, name: `${owner.name} ${label} · ${business.code}` });
 }
 

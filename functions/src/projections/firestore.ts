@@ -3,6 +3,7 @@ import { logger } from 'firebase-functions';
 import type { Queryable } from '../db/types.js';
 import { routeDayKey } from '@susu/shared';
 import { deviceStatusDocs, pairSyncHealthForDevice } from '../reads/syncHealth.js';
+import { activeBranchIds, computeBranchDay, computeCompanyDay } from '../reads/dashboards.js';
 import { getHandoverDeclaration } from '../cash/handovers.js';
 import { buildPairRoute } from '../routes/routes.js';
 
@@ -116,4 +117,52 @@ export async function publishHandoverDeclaration(q: Queryable, declarationId: st
   } catch (error) {
     logger.error('Could not publish handover declaration', { declarationId, error });
   }
+}
+
+// ── Day dashboards (Step 7, API.md §4) ──
+
+/** The previous Accra day, yyyy-mm-dd. */
+export function previousDayKey(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** `branchDashboards/{branchId}/days/{day}` from the books. Best-effort, like every projection. */
+export async function publishBranchDay(q: Queryable, branchId: string, day: string = routeDayKey()): Promise<void> {
+  try {
+    const dashboard = await computeBranchDay(q, branchId, day);
+    await getFirestore().collection('branchDashboards').doc(branchId).collection('days').doc(day).set({ ...dashboard, updatedAt: FieldValue.serverTimestamp() });
+  } catch (error) {
+    logger.error('Could not publish branch day dashboard', { branchId, day, error });
+  }
+}
+
+/** `dashboards/company/days/{day}`: every branch, plus open Firestore exceptions. */
+export async function publishCompanyDay(q: Queryable, day: string = routeDayKey()): Promise<void> {
+  try {
+    const firestore = getFirestore();
+    const open = await firestore.collection('exceptions').where('status', '==', 'OPEN').count().get();
+    const dashboard = await computeCompanyDay(q, day, open.data().count);
+    await firestore.collection('dashboards').doc('company').collection('days').doc(day).set({ ...dashboard, updatedAt: FieldValue.serverTimestamp() });
+  } catch (error) {
+    logger.error('Could not publish company day dashboard', { day, error });
+  }
+}
+
+/** After a cash action at a branch: that branch's day, then the company roll-up. */
+export async function publishBranchAndCompanyDay(q: Queryable, branchId: string, day: string = routeDayKey()): Promise<void> {
+  await publishBranchDay(q, branchId, day);
+  await publishCompanyDay(q, day);
+}
+
+/** Every active branch and the company, for today and yesterday (late figures settle after midnight). */
+export async function publishAllDayDashboards(q: Queryable, now: Date = new Date()): Promise<{ branches: number }> {
+  const today = routeDayKey(now);
+  const branches = await activeBranchIds(q);
+  for (const day of [previousDayKey(today), today]) {
+    for (const branchId of branches) await publishBranchDay(q, branchId, day);
+    await publishCompanyDay(q, day);
+  }
+  return { branches: branches.length };
 }
