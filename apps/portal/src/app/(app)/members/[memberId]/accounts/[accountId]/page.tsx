@@ -2,34 +2,46 @@
 
 import { formatCedis } from '@susu/shared';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowLeft, ReceiptText } from 'lucide-react';
+import { ArrowLeft, FilePen, ReceiptText } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { LoadError } from '@/components/load-error';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/ui/data-table';
 import { ListPager } from '@/components/ui/list-pager';
 import { RecordStatus, StatusChip } from '@/components/ui/status-chip';
+import { can } from '@/lib/access';
+import { useSession } from '@/lib/auth-context';
+import { CORRECTION_STATEMENT_KINDS } from '@/lib/corrections-api';
 import { getAccountStatement, type StatementLine } from '@/lib/members-api';
 import { usePagedList } from '@/lib/use-paged-list';
 import { formatDateTime } from '@/lib/utils';
+import { RequestCorrectionDialog } from './request-correction-dialog';
 
 const KIND_COPY: Record<string, string> = {
   SUSU_COLLECTION: 'Collection',
   WITHDRAWAL: 'Withdrawal',
+  WITHDRAWAL_PAYOUT: 'Withdrawal paid',
   OPENING_BALANCE: 'Opening balance',
+  ...CORRECTION_STATEMENT_KINDS,
 };
 
 function kindLabel(kind: string) {
+  if (KIND_COPY[kind]) return KIND_COPY[kind];
   if (kind.startsWith('REVERSAL:')) return `Reversal of ${KIND_COPY[kind.slice(9)] ?? kind.slice(9)}`;
-  return KIND_COPY[kind] ?? kind;
+  return kind;
 }
+
+const isCorrection = (kind: string) => kind.startsWith('REVERSAL:') || kind.startsWith('CORRECTION:');
 
 const money = (v: number) => (v ? formatCedis(v) : '—');
 
 export default function StatementPage() {
   const { memberId, accountId } = useParams<{ memberId: string; accountId: string }>();
+  const { claims } = useSession();
+  const canCorrect = can.requestCorrection(claims.role);
+  const [correcting, setCorrecting] = useState<StatementLine | null>(null);
   const { rows: pages, loading, loadingMore, nextCursor, error, loadMore } = usePagedList(
     async (cursor) => {
       const result = await getAccountStatement({ susuAccountId: accountId, cursor });
@@ -55,9 +67,18 @@ export default function StatementPage() {
           <div className="grid">
             <span className="flex items-center gap-2 font-medium">
               {kindLabel(row.original.kind)}
-              {row.original.kind.startsWith('REVERSAL:') && <StatusChip tone="warning">Reversed</StatusChip>}
+              {isCorrection(row.original.kind) && <StatusChip tone="warning">Approved correction</StatusChip>}
             </span>
             <span className="text-[13px] text-muted-foreground">{row.original.description}</span>
+            {canCorrect && row.original.kind === 'SUSU_COLLECTION' && row.original.creditPesewas > 0 && (
+              <button
+                type="button"
+                onClick={() => setCorrecting(row.original)}
+                className="mt-1 inline-flex w-fit items-center gap-1 text-[13px] font-medium text-primary hover:underline focus-visible:underline focus-visible:outline-none"
+              >
+                <FilePen className="size-3.5" aria-hidden /> Request correction
+              </button>
+            )}
           </div>
         ),
       },
@@ -86,7 +107,7 @@ export default function StatementPage() {
         cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue()).slice(0, 8).toUpperCase()}</span>,
       },
     ],
-    [],
+    [canCorrect],
   );
 
   return (
@@ -114,8 +135,8 @@ export default function StatementPage() {
       </div>
       <LoadError error={error} />
       <p className="text-sm text-muted-foreground">
-        Every line comes from the ledger. Nothing here can be edited; mistakes are corrected with an approved reversal,
-        and both lines stay visible.
+        Every line comes from the ledger. Nothing here can be edited: a wrong collection is fixed by a correction that a
+        different person approves, and both lines stay visible.
       </p>
       <DataTable
         columns={columns}
@@ -130,6 +151,9 @@ export default function StatementPage() {
         }
       />
       <ListPager count={lines.length} hasMore={!!nextCursor} loading={loadingMore} onLoadMore={loadMore} />
+      {account && canCorrect && (
+        <RequestCorrectionDialog line={correcting} memberId={memberId} account={account} onClose={() => setCorrecting(null)} />
+      )}
     </div>
   );
 }

@@ -49,6 +49,14 @@ export const can = {
   seeFullGhanaCard: (role: Role) => ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER'].includes(role),
   /** Bank accounts, statement import, matching and setting lines aside (API.md §2 "Bank deposits"). */
   reconcileBank: (role: Role) => role === 'SUPER_ADMIN' || role === 'FINANCE',
+  /** requestCollectionCorrection makers (API.md §2 "Corrections to collections"). */
+  requestCorrection: (role: Role) => ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'].includes(role),
+  /** approveCorrection / rejectCorrection: head office any amount; a branch manager up to the threshold (approve only). */
+  decideCorrection: (role: Role) => ['SUPER_ADMIN', 'FINANCE', 'COMPLIANCE', 'BRANCH_MANAGER'].includes(role),
+  approveCorrectionAmount: (role: Role, needsHeadOffice: boolean) =>
+    ['SUPER_ADMIN', 'FINANCE', 'COMPLIANCE'].includes(role) || (role === 'BRANCH_MANAGER' && !needsHeadOffice),
+  /** Member-registration approvals (listPendingApprovals). */
+  approveMembers: (role: Role) => ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER'].includes(role),
 };
 
 /** Roles a person may create through createStaffUser (API.md §2). */
@@ -87,7 +95,8 @@ export const NAV: NavSection[] = [
         href: '/approvals',
         label: 'Approvals',
         icon: ClipboardCheck,
-        roles: ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER'],
+        // Member checkers, plus everyone who requests or decides collection corrections.
+        roles: ['SUPER_ADMIN', 'FINANCE', 'COMPLIANCE', 'BRANCH_MANAGER', 'CASHIER', 'SUPERVISOR'],
       },
       {
         href: '/cash',

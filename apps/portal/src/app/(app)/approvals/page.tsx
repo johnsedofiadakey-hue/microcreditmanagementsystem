@@ -3,23 +3,25 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowRight, ClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { LoadError } from '@/components/load-error';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatusChip } from '@/components/ui/status-chip';
+import { can } from '@/lib/access';
 import { useSession } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { listPendingApprovals, type PendingApproval } from '@/lib/members-api';
 import { useList } from '@/lib/use-list';
-import { formatDateTime } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
+import { CorrectionsView } from './corrections';
 
 const KIND_LABEL: Record<PendingApproval['kind'], string> = {
   MEMBER_REGISTRATION: 'Member registration',
 };
 
-export default function ApprovalsPage() {
+function MemberApprovals() {
   const { user } = useSession();
   const { scope, branchName } = useBranch();
   const { rows, loading, error } = useList(() => listPendingApprovals({ branchId: scope ?? undefined }).then((r) => r.items), [scope]);
@@ -80,11 +82,7 @@ export default function ApprovalsPage() {
   );
 
   return (
-    <div className="grid gap-6">
-      <PageHeader
-        title="Approvals"
-        description="Requests waiting for a second person. You can't approve anything you started yourself."
-      />
+    <div className="grid gap-4">
       <LoadError error={error} />
       <DataTable
         columns={columns}
@@ -98,6 +96,45 @@ export default function ApprovalsPage() {
           </div>
         }
       />
+    </div>
+  );
+}
+
+type Tab = 'members' | 'corrections';
+
+export default function ApprovalsPage() {
+  const { claims } = useSession();
+  const showMembers = can.approveMembers(claims.role);
+  const [tab, setTab] = useState<Tab>(showMembers ? 'members' : 'corrections');
+  const tabs = ([['members', 'Member registrations'], ['corrections', 'Collection corrections']] as const).filter(
+    ([id]) => id !== 'members' || showMembers,
+  );
+
+  return (
+    <div className="grid gap-6">
+      <PageHeader
+        title="Approvals"
+        description="Requests waiting for a second person. You can't approve anything you started yourself."
+      />
+      {tabs.length > 1 && (
+        <div role="group" aria-label="Approval type" className="flex gap-1 overflow-x-auto border-b border-border">
+          {tabs.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={tab === id}
+              onClick={() => setTab(id)}
+              className={cn(
+                'min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none',
+                tab === id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {tab === 'members' && showMembers ? <MemberApprovals /> : <CorrectionsView />}
     </div>
   );
 }
