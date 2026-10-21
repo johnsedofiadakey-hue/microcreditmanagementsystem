@@ -1,8 +1,9 @@
-import { ROLES, type Role } from '@susu/shared';
+import { ENQUIRY_UPDATE_ROLES, ENQUIRY_VIEW_ROLES, ROLES, type Role } from '@susu/shared';
 import {
   Building2,
   ClipboardCheck,
   Landmark,
+  MessagesSquare,
   LayoutDashboard,
   Package,
   ScrollText,
@@ -57,6 +58,8 @@ export const can = {
     ['SUPER_ADMIN', 'FINANCE', 'COMPLIANCE'].includes(role) || (role === 'BRANCH_MANAGER' && !needsHeadOffice),
   /** Member-registration approvals (listPendingApprovals). */
   approveMembers: (role: Role) => ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER'].includes(role),
+  viewEnquiries: (role: Role) => (ENQUIRY_VIEW_ROLES as readonly Role[]).includes(role),
+  updateEnquiries: (role: Role) => (ENQUIRY_UPDATE_ROLES as readonly Role[]).includes(role),
 };
 
 /** Roles a person may create through createStaffUser (API.md §2). */
@@ -91,6 +94,7 @@ export const NAV: NavSection[] = [
     title: 'Operations',
     items: [
       { href: '/members', label: 'Members', icon: Users, roles: PORTAL_ROLES },
+      { href: '/enquiries', label: 'Enquiries', icon: MessagesSquare, roles: ENQUIRY_VIEW_ROLES },
       {
         href: '/approvals',
         label: 'Approvals',
