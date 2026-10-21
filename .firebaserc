@@ -3,6 +3,7 @@
     "default": "susu-dev",
     "dev": "susu-dev",
     "staging": "susu-staging",
-    "prod": "susu-prod"
+    "prod": "susu-prod",
+    "trial": "microcreditplatform"
   }
 }
