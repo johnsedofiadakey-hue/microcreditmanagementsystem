@@ -67,3 +67,4 @@ export {
   recordBankDepositFn as recordBankDeposit,
 } from './callables/bank.js';
 export { publishDayDashboards } from './triggers/dashboards.js';
+export { submitEnquiryFn as submitEnquiry } from './callables/public.js';

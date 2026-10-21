@@ -20,3 +20,4 @@ work/client-guide-stormglide-*/
 # local secrets for the Functions emulator
 .secret.local
 functions/.secret.local
+*.tsbuildinfo

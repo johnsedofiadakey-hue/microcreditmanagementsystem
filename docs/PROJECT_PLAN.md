@@ -18,8 +18,8 @@ the bottom.
 
 | Owner | Paths | Brief |
 |---|---|---|
-| Backend session | `functions/`, `dataconnect/`, `packages/shared/`, `firestore.rules`, `storage.rules`, `firebase.json`, `.github/` | `BUILD_PLAN.md` |
-| UI & Audit session | `apps/portal/`, `apps/site/`, `apps/agent-android/`, `docs/audit/` | `docs/handoff/UI_AND_AUDIT_BRIEF.md` |
+| Backend session | `functions/`, `dataconnect/`, `packages/shared/`, `firestore.rules`, `storage.rules`, `firebase.json`, `.github/`, **`apps/site/` (public site, moved 21 Oct by the project owner)** | `BUILD_PLAN.md` |
+| UI & Audit session | `apps/portal/`, `apps/agent-android/`, `docs/audit/` | `docs/handoff/UI_AND_AUDIT_BRIEF.md` |
 
 ## Status at a glance
 
@@ -52,7 +52,7 @@ Legend: ✅ done · 🟡 in progress · ⏳ not started · ⛔ blocked
 | 5 | Cashier: expected vs received cash, handover, payout queue, **bank deposits** | 🟡 | Cash checklist shows each business, vault, custody, late collections and route exceptions. **20 Oct:** Cash → Bank deposits lists deposits (awaiting match / matched / difference) and Record deposit picks business, bank account, slip, date and the closed days still holding cash (close count − deposits, last 14 days); verified on emulators up to the form (a past closed day can't be created locally). Withdrawal queue offers role-gated approve/reject/pay with confirmation and paging; cashiers can submit a per-business count. Handover confirmation and live transaction journeys still to build/verify |
 | 6 | Branch manager: activity board, work queue, close checklist | 🟡 | Cash difference cases now have a review and resolution queue. Close action and rendered end-to-end cash review still to build; activity board waits on Step 7 |
 | 7 | Head office: today at a glance, branch comparison, approvals and exceptions | 🟡 | Overview now reads the documented branch path and shows an unavailable state until Step 7 publishes dashboards. **20 Oct:** live day dashboards wired: cash controls (open cases, deposits awaiting bank match), per-business breakdown, branch comparison (click a branch to switch scope); verified with sample dashboard documents. New **Bank reconciliation** screen (SUPER_ADMIN/FINANCE act, COMPLIANCE views): bank accounts, CSV statement import with column mapping, deposits to match with server candidates (the depositor is blocked), statement lines by status, set aside. Account add, CSV import and set-aside verified on emulators; matching not exercised locally (needs a past closed day). Exception queue still to build |
-| — | Public site (`apps/site`) | ⏳ | No app exists yet. Define the public information architecture and approved copy before implementation; keep financial product claims tied to signed client rules |
+| — | Public site (`apps/site`, **backend session** since 21 Oct) | 🟡 v1 built 21 Oct | Next.js 16, 9 pages: home, Susu, micro-credit, welfare, how to join, stay safe, contact (enquiry form → `submitEnquiry`, verified on emulators), privacy (draft), accessibility. All facts in `apps/site/src/content/site.ts`; no rates, fees or loan/welfare terms. Waiting on client: logos, phone, email, hours, directions, branches, approved copy. Not deployed |
 | — | Member PWA (Stage 4, `apps/site`) | ⏳ later stage | Stage 4 in `BUILD_PLAN.md`; requires member Auth, consent, account read contracts and privacy review before a signed-in UI can be built |
 
 ## Next up

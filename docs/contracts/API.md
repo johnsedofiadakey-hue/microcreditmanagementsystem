@@ -119,6 +119,19 @@ Everything is append-only; an unmatched deposit stays on the dashboards (`unmatc
 | `matchBankDeposit` | `matchBankDepositRequestSchema` `{ depositId, statementLineId, note? }` | `{ matchId, differencePesewas, caseId }` — `differencePesewas` = bank − deposit. Refused: the depositor (`SELF_APPROVAL_FORBIDDEN`); a debit, a line dated before the deposit or on another account (`INVALID_COMMAND`); deposit or line already matched, line set aside (`CONFLICT`) | SUPER_ADMIN, FINANCE | **built 20 Oct** |
 | `ignoreBankStatementLine` | `ignoreBankStatementLineRequestSchema` `{ statementLineId, reason }` | `null`; already matched or set aside ⇒ `CONFLICT` | SUPER_ADMIN, FINANCE | **built 20 Oct** |
 
+### Public website enquiries — **built 21 Oct**
+
+The only call the public site (`apps/site`) makes. **No sign-in**; App Check is enforced as for every callable.
+
+| Function | Request (`@susu/shared/enquiries.ts`) | Response |
+|---|---|---|
+| `submitEnquiry` | `submitEnquiryRequestSchema`: `fullName`, `phone` (Ghana number, normalised to `+233…`), `town?`, `interest` (`SUSU` · `MICRO_CREDIT` · `WELFARE` · `OTHER`), `message?`, `consent: true`, `website?` (honeypot — leave empty) | `{ reference }`, e.g. `ENQ-7F3K2Q` |
+
+- Stored in Firestore `enquiries/{id}` with `status: 'NEW'`, `channel: 'WEBSITE'` and server time. Clients can't read or write it (default deny); a staff list callable is **planned**.
+- At most `ENQUIRY_DAILY_LIMIT_PER_PHONE` (3) per phone number per Accra day → `resource-exhausted`, `details.reason: 'RATE_LIMITED'`.
+- A filled honeypot returns a reference but stores nothing. Optional fields may be omitted or `null`.
+- An enquiry never creates a member, an account or money.
+
 ## 3. Agent app — offline command queue — **built (COLLECTION, HANDOVER_DECLARATION)**
 
 The agent app writes one Firestore document per action. Firestore's offline cache holds it until

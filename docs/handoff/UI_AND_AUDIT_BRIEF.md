@@ -17,7 +17,7 @@ Read these first, in order:
 | App | Path | Stack |
 |---|---|---|
 | Branch & head-office portal | `apps/portal/` | Next.js (App Router), TypeScript, Tailwind, shadcn/ui, TanStack Table, Recharts, Firebase Web SDK; deploy on Firebase App Hosting |
-| Public website (+ member PWA in Stage 4) | `apps/site/` | Next.js on App Hosting |
+| Public website (+ member PWA in Stage 4) | `apps/site/` — **owned by the backend session since 21 Oct** (project owner's decision); audit it, request changes in REQUESTS.md | Next.js on App Hosting |
 | Agent Android app | `apps/agent-android/` | Kotlin, Jetpack Compose, Firebase Android SDK (Auth, Firestore with offline persistence, Storage, FCM, App Check with Play Integrity, Crashlytics), WorkManager, BiometricPrompt |
 
 Use the workspace package `@susu/shared` in the web apps for types, Zod schemas, enums, role names and `formatCedis()`. For Android, mirror the same field names and enums exactly — `docs/contracts/API.md` lists them.

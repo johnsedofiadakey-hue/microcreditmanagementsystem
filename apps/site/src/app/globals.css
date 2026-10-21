@@ -1,0 +1,160 @@
+@import 'tailwindcss';
+
+/* Same family as the portal (apps/portal/src/app/globals.css): deep field green, warm paper, kente gold. */
+:root {
+  --background: #f7f3e9;
+  --surface: #fffdf8;
+  --foreground: #173d33;
+  --muted: #eee9dc;
+  --muted-foreground: #52685e;
+  --border: #ddd6c4;
+  --ring: #236e58;
+
+  --primary: #236e58;
+  --primary-strong: #173d33;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e3eee6;
+  --accent: #d9ad61;
+  --accent-soft: #f8edd6;
+
+  /* One tone per business (ADR-001). */
+  --gadufia: #236e58;
+  --gadufia-soft: #e3eee6;
+  --stf: #b0532c;
+  --stf-soft: #f8e6dc;
+  --opws: #6a4a8c;
+  --opws-soft: #eee6f5;
+
+  --warning: #8f5a00;
+  --warning-soft: #fdf1d8;
+  --destructive: #c42d2d;
+  --success: #11734f;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-gadufia: var(--gadufia);
+  --color-gadufia-soft: var(--gadufia-soft);
+  --color-stf: var(--stf);
+  --color-stf-soft: var(--stf-soft);
+  --color-opws: var(--opws);
+  --color-opws-soft: var(--opws-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Satoshi', var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+  h1, h2, h3, h4 {
+    @apply font-heading tracking-tight text-balance;
+  }
+  :focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Hero: deep green with a warm glow and slow orbit rings (static when motion is reduced). */
+.hero-field {
+  background:
+    radial-gradient(circle at 82% 22%, rgb(217 173 97 / 16%), transparent 32%),
+    radial-gradient(circle at 10% 90%, rgb(35 110 88 / 45%), transparent 40%),
+    linear-gradient(150deg, #173d33 0%, #1b493b 55%, #102e27 100%);
+}
+
+.orbit {
+  position: absolute;
+  aspect-ratio: 1;
+  border: 1px solid rgb(232 217 178 / 16%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.orbit::before,
+.orbit::after {
+  content: '';
+  position: absolute;
+  border: 1px solid rgb(232 217 178 / 13%);
+  border-radius: 50%;
+  inset: 17%;
+}
+.orbit::after { inset: 34%; }
+.orbit-dot {
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 6px rgb(217 173 97 / 18%);
+}
+
+/* Kente-inspired strip used as a quiet divider. */
+.kente-strip {
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--accent) 0 28px,
+    var(--primary-strong) 28px 34px,
+    var(--stf) 34px 46px,
+    var(--primary-strong) 46px 52px,
+    var(--primary) 52px 80px,
+    var(--primary-strong) 80px 86px
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .orbit { animation: orbit-turn 60s linear infinite; }
+  .rise { animation: rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .rise-1 { animation-delay: 80ms; }
+  .rise-2 { animation-delay: 160ms; }
+  .rise-3 { animation-delay: 240ms; }
+  .rise-4 { animation-delay: 320ms; }
+  .sms-in { animation: sms-in 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .sms-in-2 { animation-delay: 900ms; }
+  .sms-in-3 { animation-delay: 1800ms; }
+}
+
+@keyframes orbit-turn { to { transform: rotate(360deg); } }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sms-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}

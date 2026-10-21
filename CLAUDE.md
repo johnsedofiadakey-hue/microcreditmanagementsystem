@@ -7,8 +7,8 @@ Read `BUILD_PLAN.md` first — it is the agreed architecture and build order.
 
 | Area | Owner | Paths |
 |---|---|---|
-| **Backend** — ledger, Cloud Functions, Data Connect / SQL schema, Firestore & Storage rules, shared contracts, CI | Backend Claude session | `functions/`, `dataconnect/`, `packages/shared/`, `firestore.rules`, `storage.rules`, `firebase.json`, `.github/` |
-| **UI + project audit** — portal, public site, member PWA, agent Android app screens, and an independent audit of the whole project | UI & Audit Claude session | `apps/portal/`, `apps/site/`, `apps/agent-android/`, `docs/audit/` |
+| **Backend** — ledger, Cloud Functions, Data Connect / SQL schema, Firestore & Storage rules, shared contracts, CI — **and the public website** (moved by the project owner, 21 Oct) | Backend Claude session | `functions/`, `dataconnect/`, `packages/shared/`, `firestore.rules`, `storage.rules`, `firebase.json`, `.github/`, `apps/site/` |
+| **UI + project audit** — portal, agent Android app screens, and an independent audit of the whole project (the audit still covers the public site) | UI & Audit Claude session | `apps/portal/`, `apps/agent-android/`, `docs/audit/` |
 
 If you are the **UI & Audit** session, your full brief is `docs/handoff/UI_AND_AUDIT_BRIEF.md`. Read it before doing anything.
 
