@@ -19,9 +19,10 @@ import { cn, formatDateTime, todayKey } from '@/lib/utils';
 import { CasesView } from './cases';
 import { CountDialog } from './count-dialog';
 import { DepositsView } from './deposits';
+import { HandoversView } from './handovers';
 import { WithdrawalsView } from './withdrawals';
 
-type CashView = 'overview' | 'withdrawals' | 'deposits' | 'cases';
+type CashView = 'overview' | 'handovers' | 'withdrawals' | 'deposits' | 'cases';
 
 function Amount({ label, value }: { label: string; value: number }) {
   return (
@@ -207,6 +208,7 @@ export default function CashPage() {
       <div role="group" aria-label="Cash operations" className="flex gap-1 overflow-x-auto border-b border-border">
         {([
           ['overview', 'Cash position'],
+          ['handovers', 'Handovers'],
           ['withdrawals', 'Withdrawals'],
           ['deposits', 'Bank deposits'],
           ['cases', 'Differences'],
@@ -224,6 +226,8 @@ export default function CashPage() {
         <CashDayDetails key={`${branchId}:${businessId}:${day}`} branchId={branchId} businessId={businessId} day={day} refresh={refresh} />
       ) : view === 'withdrawals' ? (
         <WithdrawalsView key={`${branchId}:${businessId}`} branchId={branchId} businessId={businessId} refresh={refresh} businessName={businessName} />
+      ) : view === 'handovers' ? (
+        <HandoversView key={`${branchId}:${businessId}`} branchId={branchId} businessId={businessId} refresh={refresh} />
       ) : view === 'deposits' ? (
         <DepositsView key={`${branchId}:${businessId}`} branchId={branchId} businessId={businessId} refresh={refresh} businessName={businessName} />
       ) : (

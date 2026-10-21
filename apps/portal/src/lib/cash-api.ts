@@ -3,7 +3,10 @@
 import type {
   BranchCashDay,
   CaseSummary,
+  ConfirmHandoverRequest,
   DecideWithdrawalRequest,
+  HandoverDeclarationSummary,
+  HandoverResult,
   HandoverSummary,
   RejectWithdrawalRequest,
   ResolveCaseRequest,
@@ -25,6 +28,14 @@ export function listWithdrawals(input: { branchId?: string; businessId?: string;
 
 export function listHandovers(input: { branchId?: string; businessId?: string; day?: string; cursor?: string }) {
   return call<typeof input, { handovers: HandoverSummary[]; nextCursor: string | null }>('listHandovers', input);
+}
+
+export function listHandoverDeclarations(input: { branchId?: string; status?: 'OPEN' | 'ALL'; cursor?: string | null; limit?: number }) {
+  return call<typeof input, { declarations: HandoverDeclarationSummary[]; nextCursor: string | null }>('listHandoverDeclarations', input);
+}
+
+export function confirmHandover(input: ConfirmHandoverRequest) {
+  return write<ConfirmHandoverRequest, HandoverResult>('confirmHandover', input);
 }
 
 export function listCases(input: { branchId?: string; businessId?: string; status?: 'OPEN' | 'RESOLVED'; cursor?: string }) {
