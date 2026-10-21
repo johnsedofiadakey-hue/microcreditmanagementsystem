@@ -16,7 +16,8 @@
     "test:pg": "dropdb --if-exists susu_test && createdb susu_test && TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql:///susu_test} vitest run test/concurrency.pg.test.ts test/bank.pg.test.ts --no-file-parallelism",
     "migrate": "tsx scripts/migrate.ts",
     "seed:local": "tsx scripts/seed-local.ts",
-    "bootstrap:admin": "tsx scripts/bootstrap-admin.ts"
+    "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@google-cloud/cloud-sql-connector": "1.12.0",

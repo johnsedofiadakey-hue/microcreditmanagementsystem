@@ -15,6 +15,9 @@ Owner: backend. Set up 21 Oct 2026.
 | Functions service account | `791592522752-compute@…` granted: cloudsql.client, datastore.user, storage.objectAdmin, firebaseauth.admin, eventarc.eventReceiver, logging.logWriter, cloudbuild.builds.builder, artifactregistry.writer, and tokenCreator on itself (signed KYC URLs) |
 | First super admin | created with `bootstrap:admin` |
 
+## Demo data (21 Oct 2026)
+Seeded with `seed:demo` (functions/scripts/seed-demo.ts): branch **DEMO-AFL** "DEMO Aflao Main", product **DEMO-DAILY**, staff "DEMO …" whose emails are `johnsedofiadakey+demo-<role>@gmail.com` (sign in as one with **Forgot password**), 5 members "… (Demo)" with 020 000 00xx phones and GHA-0000000xx cards, a scripted phone, 6 signed collections (GH₵ 140) posted by the deployed trigger, a GH₵ 115 two-party handover, one paid and one pending withdrawal. No close or bank deposit. The scripted phone's private key existed only during the run, so it cannot post again; bind a real phone for more collections.
+
 ## Known trade-offs
 - **Cross-region latency:** functions and Firestore are in europe-west1, the database in us-west1, so every query crosses the Atlantic. Postings and portal actions take a few seconds. Acceptable for demos; the paid production database goes in europe-west1.
 - **No App Check yet:** register the web app (reCAPTCHA Enterprise) and Android app (Play Integrity), then set `ENFORCE_APP_CHECK=true` and redeploy.
