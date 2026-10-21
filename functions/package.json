@@ -15,9 +15,11 @@
     "test:rules": "JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} PATH=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}/bin:$PATH firebase emulators:exec --only firestore,storage --project demo-susu \"vitest run --config vitest.rules.config.ts\"",
     "test:pg": "dropdb --if-exists susu_test && createdb susu_test && TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql:///susu_test} vitest run test/concurrency.pg.test.ts test/bank.pg.test.ts --no-file-parallelism",
     "migrate": "tsx scripts/migrate.ts",
-    "seed:local": "tsx scripts/seed-local.ts"
+    "seed:local": "tsx scripts/seed-local.ts",
+    "bootstrap:admin": "tsx scripts/bootstrap-admin.ts"
   },
   "dependencies": {
+    "@google-cloud/cloud-sql-connector": "1.12.0",
     "firebase-admin": "14.5.0",
     "firebase-functions": "7.4.0",
     "pg": "8.23.1",
@@ -30,8 +32,8 @@
     "@types/pg": "8.23.1",
     "firebase": "13.0.0",
     "tsup": "9.0.0",
+    "tsx": "4.23.15",
     "typescript": "5.9.3",
-    "vitest": "5.0.5",
-    "tsx": "4.23.15"
+    "vitest": "5.0.5"
   }
 }

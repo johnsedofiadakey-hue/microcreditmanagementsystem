@@ -7,7 +7,7 @@ import type { Database } from '../db/types.js';
 import type { Actor } from '../lib/actor.js';
 import { isDomainError } from '../lib/errors.js';
 import { assertStaffActive } from '../org/staff.js';
-import { DATABASE_URL, REGION, getDatabase } from '../runtime.js';
+import { DATABASE_URL, ENFORCE_APP_CHECK, REGION, getDatabase } from '../runtime.js';
 
 const STATUS_BY_REASON: Record<string, ConstructorParameters<typeof HttpsError>[0]> = {
   NOT_PERMITTED: 'permission-denied',
@@ -39,7 +39,7 @@ export function staffCallable<S extends z.ZodType, R>(
   handler: (ctx: { db: Database; actor: Actor; input: z.output<S>; request: CallableRequest }) => Promise<R>,
   options: { secrets?: SecretParam[] } = {},
 ) {
-  return onCall({ region: REGION, enforceAppCheck: true, secrets: [DATABASE_URL, ...(options.secrets ?? [])] }, async (request) => {
+  return onCall({ region: REGION, enforceAppCheck: ENFORCE_APP_CHECK, secrets: [DATABASE_URL, ...(options.secrets ?? [])] }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in first');
     const claims = authClaimsSchema.safeParse(request.auth.token);
     if (!claims.success) throw new HttpsError('permission-denied', 'Your account has no role assigned');

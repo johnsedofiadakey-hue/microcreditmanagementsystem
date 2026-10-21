@@ -8,8 +8,12 @@ const SERIALIZATION_FAILURE = '40001';
 const DEADLOCK_DETECTED = '40P01';
 const MAX_ATTEMPTS = 5;
 
-export function createPgDatabase(connectionString: string, maxConnections = 5): Database {
-  const pool = new pg.Pool({ connectionString, max: maxConnections });
+/**
+ * `poolOptions` is merged into the pool config — the Cloud SQL connector passes its secure `stream`
+ * here, so the connection string supplies only user, password and database.
+ */
+export function createPgDatabase(connectionString: string, maxConnections = 5, poolOptions: pg.PoolConfig = {}): Database {
+  const pool = new pg.Pool({ connectionString, max: maxConnections, ...poolOptions });
 
   const run = async <T>(client: pg.Pool | pg.PoolClient, sql: string, params?: readonly unknown[]) => {
     const result = await client.query(sql, params as unknown[] | undefined);
