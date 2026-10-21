@@ -2,7 +2,9 @@ import { initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { ENQUIRY_DAILY_LIMIT_PER_PHONE, submitEnquiryRequestSchema } from '@susu/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { listEnquiries, updateEnquiry } from '../../src/enquiries/staff.js';
 import { enquiryLimitKey, enquiryReference, submitEnquiry } from '../../src/enquiries/submit.js';
+import type { Actor } from '../../src/lib/actor.js';
 
 /** Runs against the Firestore emulator (corepack pnpm test:rules). Own project ID. */
 const PROJECT = 'demo-susu-enquiries';
@@ -81,5 +83,47 @@ describe('submitEnquiryRequestSchema from the callable SDK', () => {
   it('accepts null for empty optional fields (the Firebase client sends undefined as null)', () => {
     const parsed = submitEnquiryRequestSchema.safeParse({ fullName: 'Ama', phone: '0241234567', interest: 'SUSU', consent: true, town: null, message: null, website: null });
     expect(parsed.success).toBe(true);
+  });
+});
+
+const staff = (role: Actor['claims']['role'], uid = `${role.toLowerCase()}-1`): Actor => ({ uid, claims: { role, branchIds: [] }, channel: 'PORTAL' });
+
+describe('staff follow-up', () => {
+  async function seed(n: number) {
+    for (let i = 0; i < n; i++) {
+      await submitEnquiry(firestore, parse({ phone: `024 000 00${String(i).padStart(2, '0')}`, interest: i % 2 ? 'WELFARE' : 'SUSU' }), { appCheckAppId: null, now });
+    }
+  }
+
+  it('lists newest first with cursor paging and filters', async () => {
+    await seed(5);
+    const first = await listEnquiries(firestore, staff('BRANCH_MANAGER'), { limit: 3 });
+    expect(first.enquiries).toHaveLength(3);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await listEnquiries(firestore, staff('BRANCH_MANAGER'), { limit: 3, cursor: first.nextCursor });
+    expect(second.enquiries).toHaveLength(2);
+    expect(second.nextCursor).toBeNull();
+    const ids = [...first.enquiries, ...second.enquiries].map((e) => e.id);
+    expect(new Set(ids).size).toBe(5);
+    expect((await listEnquiries(firestore, staff('COMPLIANCE'), { interest: 'WELFARE' })).enquiries).toHaveLength(2);
+    expect((await listEnquiries(firestore, staff('SUPER_ADMIN'), { status: 'NEW' })).enquiries).toHaveLength(5);
+  });
+
+  it('keeps cashiers and agents out', async () => {
+    await expect(listEnquiries(firestore, staff('CASHIER'), {})).rejects.toMatchObject({ reason: 'NOT_PERMITTED' });
+    await expect(listEnquiries(firestore, staff('AGENT'), {})).rejects.toMatchObject({ reason: 'NOT_PERMITTED' });
+  });
+
+  it('records calls as notes, closes once with an outcome, and compliance cannot update', async () => {
+    await seed(1);
+    const [e] = (await listEnquiries(firestore, staff('SUPERVISOR'), {})).enquiries;
+    await expect(updateEnquiry(firestore, staff('COMPLIANCE'), { enquiryId: e!.id, status: 'CONTACTED', note: 'Called' })).rejects.toMatchObject({ reason: 'NOT_PERMITTED' });
+    await updateEnquiry(firestore, staff('SUPERVISOR'), { enquiryId: e!.id, status: 'CONTACTED', note: 'No answer, try Friday' });
+    await updateEnquiry(firestore, staff('SUPERVISOR'), { enquiryId: e!.id, status: 'CONTACTED', note: 'Spoke, visit booked' });
+    const closed = await updateEnquiry(firestore, staff('BRANCH_MANAGER'), { enquiryId: e!.id, status: 'CLOSED', outcome: 'JOINED', note: 'Registered at the office' });
+    expect(closed).toMatchObject({ status: 'CLOSED', outcome: 'JOINED' });
+    expect(closed.notes.map((n) => n.note)).toEqual(['No answer, try Friday', 'Spoke, visit booked', 'Registered at the office']);
+    expect(closed.notes[2]).toMatchObject({ byUid: 'branch_manager-1', outcome: 'JOINED' });
+    await expect(updateEnquiry(firestore, staff('SUPER_ADMIN'), { enquiryId: e!.id, status: 'CONTACTED', note: 'Again' })).rejects.toMatchObject({ reason: 'CONFLICT' });
   });
 });

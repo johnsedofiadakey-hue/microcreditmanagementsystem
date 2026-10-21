@@ -1,6 +1,8 @@
 import type { MetadataRoute } from 'next';
 import { site } from '@/content/site';
 
+export const dynamic = 'force-static';
+
 const PATHS = ['', '/susu', '/micro-credit', '/welfare', '/how-to-join', '/stay-safe', '/contact', '/privacy', '/accessibility'];
 
 export default function sitemap(): MetadataRoute.Sitemap {

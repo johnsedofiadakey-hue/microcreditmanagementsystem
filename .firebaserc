@@ -5,5 +5,15 @@
     "staging": "susu-staging",
     "prod": "susu-prod",
     "trial": "microcreditplatform"
-  }
+  },
+  "targets": {
+    "microcreditplatform": {
+      "hosting": {
+        "site": [
+          "gadufia-fiase"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

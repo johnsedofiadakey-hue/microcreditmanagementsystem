@@ -1,9 +1,11 @@
-import { submitEnquiryRequestSchema } from '@susu/shared';
+import { listEnquiriesRequestSchema, submitEnquiryRequestSchema, updateEnquiryRequestSchema } from '@susu/shared';
 import { getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { listEnquiries, updateEnquiry } from '../enquiries/staff.js';
 import { EnquiryRateLimitedError, submitEnquiry } from '../enquiries/submit.js';
 import { ENFORCE_APP_CHECK, REGION } from '../runtime.js';
+import { staffCallable } from './staffCallable.js';
 
 /**
  * The public website's only backend call (API.md §2). No sign-in; App Check proves the request came
@@ -25,3 +27,8 @@ export const submitEnquiryFn = onCall({ region: REGION, enforceAppCheck: ENFORCE
     throw new HttpsError('internal', 'Something went wrong. Please try again or call the office.');
   }
 });
+
+// ── Staff follow-up (portal) ──
+
+export const listEnquiriesFn = staffCallable(listEnquiriesRequestSchema, ({ actor, input }) => listEnquiries(getFirestore(), actor, input));
+export const updateEnquiryFn = staffCallable(updateEnquiryRequestSchema, ({ actor, input }) => updateEnquiry(getFirestore(), actor, input));

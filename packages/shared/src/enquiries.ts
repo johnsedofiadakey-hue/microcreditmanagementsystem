@@ -33,3 +33,72 @@ export interface SubmitEnquiryResult {
 
 /** At most this many enquiries per phone number per Accra day; more fail with RATE_LIMITED. */
 export const ENQUIRY_DAILY_LIMIT_PER_PHONE = 3;
+
+// ── Staff follow-up (portal) ──
+
+export const ENQUIRY_STATUSES = ['NEW', 'CONTACTED', 'CLOSED'] as const;
+export type EnquiryStatus = (typeof ENQUIRY_STATUSES)[number];
+
+/** Why an enquiry was closed — counted on reports. */
+export const ENQUIRY_OUTCOMES = ['JOINED', 'NOT_INTERESTED', 'UNREACHABLE', 'DUPLICATE', 'OTHER'] as const;
+export type EnquiryOutcome = (typeof ENQUIRY_OUTCOMES)[number];
+
+/** Roles that see and follow up website enquiries. COMPLIANCE may only read. */
+export const ENQUIRY_VIEW_ROLES = ['SUPER_ADMIN', 'COMPLIANCE', 'BRANCH_MANAGER', 'SUPERVISOR'] as const;
+export const ENQUIRY_UPDATE_ROLES = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR'] as const;
+
+export const listEnquiriesRequestSchema = z
+  .object({
+    status: z.enum(ENQUIRY_STATUSES).optional(),
+    interest: z.enum(ENQUIRY_INTERESTS).optional(),
+    cursor: z.string().max(400).nullish(),
+    limit: z.int().min(1).max(200).optional(),
+  })
+  .strict();
+export type ListEnquiriesRequest = z.input<typeof listEnquiriesRequestSchema>;
+
+/**
+ * Record a call or close the enquiry. CONTACTED may be recorded more than once (each call is a
+ * note); CLOSED needs an outcome and is final.
+ */
+export const updateEnquiryRequestSchema = z
+  .object({
+    enquiryId: z.uuid(),
+    status: z.enum(['CONTACTED', 'CLOSED']),
+    outcome: z.enum(ENQUIRY_OUTCOMES).optional(),
+    note: z.string().trim().min(3).max(500),
+  })
+  .strict()
+  .refine((v) => v.status !== 'CLOSED' || v.outcome, { message: 'Choose an outcome to close the enquiry', path: ['outcome'] });
+export type UpdateEnquiryRequest = z.input<typeof updateEnquiryRequestSchema>;
+
+export interface EnquiryNote {
+  status: 'CONTACTED' | 'CLOSED';
+  outcome: EnquiryOutcome | null;
+  note: string;
+  byUid: string;
+  /** Server time, ISO 8601. */
+  at: string;
+}
+
+export interface EnquirySummary {
+  id: string;
+  reference: string;
+  fullName: string;
+  /** Full number: staff need it to call back. */
+  phone: string;
+  town: string | null;
+  interest: EnquiryInterest;
+  message: string | null;
+  status: EnquiryStatus;
+  outcome: EnquiryOutcome | null;
+  createdAt: string;
+  updatedAt: string | null;
+  /** Oldest first. */
+  notes: EnquiryNote[];
+}
+
+export interface ListEnquiriesResult {
+  enquiries: EnquirySummary[];
+  nextCursor: string | null;
+}

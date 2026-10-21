@@ -92,4 +92,6 @@ export const site = {
   description:
     'Daily Susu savings collected at your door, with an SMS receipt for every payment. Gadufia Fiase Susu Services, STF Micro-Credit Services and Opportunity Welfare, Aflao, Volta Region.',
   url: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3001',
+  /** Search engines may index the site only once the client approves the copy (NEXT_PUBLIC_SITE_INDEXABLE=true). */
+  indexable: process.env.NEXT_PUBLIC_SITE_INDEXABLE === 'true',
 };

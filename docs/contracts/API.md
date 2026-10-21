@@ -127,10 +127,21 @@ The only call the public site (`apps/site`) makes. **No sign-in**; App Check is 
 |---|---|---|
 | `submitEnquiry` | `submitEnquiryRequestSchema`: `fullName`, `phone` (Ghana number, normalised to `+233…`), `town?`, `interest` (`SUSU` · `MICRO_CREDIT` · `WELFARE` · `OTHER`), `message?`, `consent: true`, `website?` (honeypot — leave empty) | `{ reference }`, e.g. `ENQ-7F3K2Q` |
 
-- Stored in Firestore `enquiries/{id}` with `status: 'NEW'`, `channel: 'WEBSITE'` and server time. Clients can't read or write it (default deny); a staff list callable is **planned**.
+- Stored in Firestore `enquiries/{id}` with `status: 'NEW'`, `channel: 'WEBSITE'` and server time. Clients can't read or write it (default deny); staff use `listEnquiries` / `updateEnquiry` below.
 - At most `ENQUIRY_DAILY_LIMIT_PER_PHONE` (3) per phone number per Accra day → `resource-exhausted`, `details.reason: 'RATE_LIMITED'`.
 - A filled honeypot returns a reference but stores nothing. Optional fields may be omitted or `null`.
 - An enquiry never creates a member, an account or money.
+
+**Staff follow-up (portal) — built 21 Oct.** Types in `@susu/shared/enquiries.ts`.
+
+| Function | Who | Request | Response |
+|---|---|---|---|
+| `listEnquiries` | `ENQUIRY_VIEW_ROLES`: SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER, SUPERVISOR | `{ status?: NEW·CONTACTED·CLOSED, interest?, cursor?, limit? }` | `{ enquiries: EnquirySummary[], nextCursor }`, newest first |
+| `updateEnquiry` | `ENQUIRY_UPDATE_ROLES`: SUPER_ADMIN, BRANCH_MANAGER, SUPERVISOR (COMPLIANCE reads only) | `{ enquiryId, status: CONTACTED·CLOSED, outcome? (required to close: JOINED·NOT_INTERESTED·UNREACHABLE·DUPLICATE·OTHER), note }` | the updated `EnquirySummary` |
+
+- Every update appends a note (who, server time, status, outcome); CONTACTED can be recorded many times; CLOSED is final (`CONFLICT` after).
+- Enquiries have no branch yet: every viewing role sees all of them. The full phone number is returned because staff call back; show it only on this screen.
+- Errors: `NOT_PERMITTED`, `NOT_FOUND`, `CONFLICT`, `invalid-argument` with `issues` (e.g. `outcome` missing when closing).
 
 ## 3. Agent app — offline command queue — **built (COLLECTION, HANDOVER_DECLARATION)**
 

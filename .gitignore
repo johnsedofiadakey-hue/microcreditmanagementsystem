@@ -21,3 +21,4 @@ work/client-guide-stormglide-*/
 .secret.local
 functions/.secret.local
 *.tsbuildinfo
+/apps/site/out/

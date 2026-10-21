@@ -15,6 +15,14 @@ Owner: backend. Set up 21 Oct 2026.
 | Functions service account | `791592522752-compute@…` granted: cloudsql.client, datastore.user, storage.objectAdmin, firebaseauth.admin, eventarc.eventReceiver, logging.logWriter, cloudbuild.builds.builder, artifactregistry.writer, and tokenCreator on itself (signed KYC URLs) |
 | First super admin | created with `bootstrap:admin` |
 
+## Public website preview (21 Oct 2026)
+- Hosting site **`gadufia-fiase`** → https://gadufia-fiase.web.app (target `site` in `.firebaserc`; static export of `apps/site`).
+- Build settings: `apps/site/.env.production.local` (git-ignored; copy `apps/site/.env.example`, set the trial's web config and `NEXT_PUBLIC_USE_EMULATORS=false`).
+- Search engines are told not to index it until the client approves the copy (`NEXT_PUBLIC_SITE_INDEXABLE`).
+- Functions `submitEnquiry`, `listEnquiries`, `updateEnquiry` deployed; Firestore indexes for `enquiries` deployed.
+- Deploy the site only: `firebase deploy --only hosting:site --project microcreditplatform`.
+- Other functions on the trial are still at the earlier deploy (the dashboard fix `8885ef4` is not deployed).
+
 ## Demo data (21 Oct 2026)
 Seeded with `seed:demo` (functions/scripts/seed-demo.ts): branch **DEMO-AFL** "DEMO Aflao Main", product **DEMO-DAILY**, staff "DEMO …" whose emails are `johnsedofiadakey+demo-<role>@gmail.com` (sign in as one with **Forgot password**), 5 members "… (Demo)" with 020 000 00xx phones and GHA-0000000xx cards, a scripted phone, 6 signed collections (GH₵ 140) posted by the deployed trigger, a GH₵ 115 two-party handover, one paid and one pending withdrawal. No close or bank deposit. The scripted phone's private key existed only during the run, so it cannot post again; bind a real phone for more collections.
 
