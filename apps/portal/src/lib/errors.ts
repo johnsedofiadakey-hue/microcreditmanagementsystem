@@ -62,7 +62,9 @@ export function toActionError(error: unknown): ActionError {
     for (const issue of details?.issues ?? []) fieldErrors[issue.path] = issue.message;
     const code = error.code.replace(/^functions\//, '');
     const message =
-      (reason === 'INSUFFICIENT_BALANCE' && error.message ? error.message : undefined) ??
+      (reason && ['INSUFFICIENT_BALANCE', 'SELF_APPROVAL_FORBIDDEN', 'APPROVAL_LIMIT_EXCEEDED'].includes(reason) && error.message
+        ? error.message
+        : undefined) ??
       (reason && reason in REASON_COPY ? REASON_COPY[reason as RejectReason] : undefined) ??
       CODE_COPY[code] ??
       error.message;

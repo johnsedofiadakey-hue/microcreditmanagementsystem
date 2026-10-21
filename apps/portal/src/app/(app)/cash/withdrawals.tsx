@@ -165,6 +165,10 @@ function WithdrawalResults({
                     )}
                     {canPay && <Button size="sm" onClick={() => setSelection({ row, decision: 'pay' })}><BanknoteArrowDown /> Record payout</Button>}
                     {row.status === 'PENDING_APPROVAL' && !canCheck && <span className="text-xs text-muted-foreground">{row.requestedBy === user.uid ? 'Needs another person' : 'Awaiting authorised checker'}</span>}
+                    {row.status === 'APPROVED' && !canPay && (role === 'CASHIER' || role === 'BRANCH_MANAGER') &&
+                      (row.requestedBy === user.uid || row.decidedBy === user.uid) && (
+                        <span className="text-xs text-muted-foreground">{row.requestedBy === user.uid ? 'You requested this; another cashier must pay' : 'You approved this; another cashier must pay'}</span>
+                      )}
                   </div>
                 </CardContent>
               </Card>
