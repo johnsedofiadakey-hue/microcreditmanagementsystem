@@ -15,6 +15,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -39,6 +40,7 @@ import com.stormglide.susu.agent.ui.screens.PhoneScreen
 import com.stormglide.susu.agent.ui.screens.QueueScreen
 import com.stormglide.susu.agent.ui.screens.RouteScreen
 import com.stormglide.susu.agent.ui.screens.SignInScreen
+import com.stormglide.susu.agent.ui.theme.SusuColors
 
 private enum class Tab(val label: String) { ROUTE("Route"), RECORDS("Records"), PHONE("Phone") }
 
@@ -106,11 +108,16 @@ private fun SignedIn(vm: AgentViewModel, state: AuthState.Ready) {
         topBar = { SyncBanner(unsynced = unsynced, pending = pending, rejected = rejected, online = online) },
         bottomBar = {
             if (draft == null) {
-                NavigationBar {
+                NavigationBar(containerColor = SusuColors.Surface) {
                     Tab.entries.forEach { t ->
                         NavigationBarItem(
                             selected = tab == t,
                             onClick = { tab = t },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = SusuColors.Primary,
+                                selectedTextColor = SusuColors.Ink,
+                                indicatorColor = SusuColors.PrimarySoft,
+                            ),
                             label = { Text(t.label) },
                             icon = {
                                 val icon = when (t) {

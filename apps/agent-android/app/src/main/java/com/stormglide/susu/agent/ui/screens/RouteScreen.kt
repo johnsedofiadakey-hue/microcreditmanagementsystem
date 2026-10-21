@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
@@ -54,12 +55,21 @@ fun RouteScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            Text("Today's route", style = MaterialTheme.typography.headlineSmall)
-            Text(
-                "${members.size} ${if (members.size == 1) "member" else "members"} · tap a member to record a collection",
-                style = MaterialTheme.typography.bodyMedium,
-                color = SusuColors.Muted,
-            )
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SusuColors.Ink),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(18.dp)) {
+                    Text("YOUR FIELD DAY", style = MaterialTheme.typography.labelMedium, color = SusuColors.Accent)
+                    Text("Today's route", style = MaterialTheme.typography.headlineSmall, color = SusuColors.Surface)
+                    Text(
+                        "${members.size} ${if (members.size == 1) "member" else "members"} · tap a member to record a collection",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = SusuColors.Surface,
+                    )
+                }
+            }
         }
         item {
             OutlinedTextField(

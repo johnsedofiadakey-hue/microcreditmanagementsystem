@@ -41,7 +41,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                 onClick={onNavigate}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none',
+                  'field-nav-link flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none',
                   active
                     ? 'bg-sidebar-active font-medium text-white'
                     : 'text-sidebar-foreground hover:bg-sidebar-active/60 hover:text-white',

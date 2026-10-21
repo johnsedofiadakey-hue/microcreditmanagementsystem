@@ -74,7 +74,7 @@ fun SyncBanner(unsynced: Int, pending: Int, rejected: Int, online: Boolean) {
         )
         unsynced > 0 -> Quad("Syncing $unsynced ${plural(unsynced)}…", SusuColors.Warning, SusuColors.WarningSoft, Icons.Outlined.CloudSync)
         pending > 0 -> Quad("$pending ${plural(pending)} received, waiting for the server", SusuColors.Warning, SusuColors.WarningSoft, Icons.Outlined.Schedule)
-        !online -> Quad("Offline · you can keep recording collections", SusuColors.Muted, Color(0xFFEEF1EE), Icons.Outlined.CloudOff)
+        !online -> Quad("Offline · you can keep recording collections", SusuColors.Muted, SusuColors.Background, Icons.Outlined.CloudOff)
         else -> Quad("All records synced", SusuColors.Success, SusuColors.SuccessSoft, Icons.Outlined.CheckCircle)
     }
     Row(

@@ -17,14 +17,14 @@ import com.stormglide.susu.agent.R
 
 /** Same palette as the portal. High contrast throughout: agents work outdoors in bright sun. */
 object SusuColors {
-    val Primary = Color(0xFF0D7A5F)
-    val PrimarySoft = Color(0xFFE3F3ED)
-    val Ink = Color(0xFF0F1D18)
-    val Muted = Color(0xFF4A5952)
-    val Background = Color(0xFFF7F8F6)
-    val Surface = Color(0xFFFFFFFF)
-    val Border = Color(0xFFD5DCD7)
-    val Accent = Color(0xFFE9A90C)
+    val Primary = Color(0xFF236E58)
+    val PrimarySoft = Color(0xFFE3EEE6)
+    val Ink = Color(0xFF173D33)
+    val Muted = Color(0xFF52685E)
+    val Background = Color(0xFFF7F3E9)
+    val Surface = Color(0xFFFFFDF8)
+    val Border = Color(0xFFC7D4C9)
+    val Accent = Color(0xFFD9AD61)
 
     val Success = Color(0xFF0E6B49)
     val SuccessSoft = Color(0xFFE0F2E9)
@@ -40,11 +40,13 @@ private val colors = lightColorScheme(
     primaryContainer = SusuColors.PrimarySoft,
     onPrimaryContainer = SusuColors.Ink,
     secondary = SusuColors.Accent,
+    onSecondary = SusuColors.Ink,
     background = SusuColors.Background,
     onBackground = SusuColors.Ink,
     surface = SusuColors.Surface,
     onSurface = SusuColors.Ink,
     onSurfaceVariant = SusuColors.Muted,
+    surfaceVariant = Color(0xFFEEE9DC),
     outline = SusuColors.Border,
     error = SusuColors.Danger,
 )
@@ -89,9 +91,9 @@ private val typography = base.copy(
 )
 
 private val shapes = Shapes(
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(22.dp),
 )
 
 @Composable

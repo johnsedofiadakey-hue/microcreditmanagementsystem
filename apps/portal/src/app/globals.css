@@ -4,20 +4,20 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #f7f8f6;
-  --surface: #ffffff;
-  --foreground: #12201b;
-  --muted: #eef1ee;
-  --muted-foreground: #5b6a63;
-  --border: #e2e7e3;
-  --input: #d5dcd7;
-  --ring: #0d7a5f;
+  --background: #f7f3e9;
+  --surface: #fffdf8;
+  --foreground: #173d33;
+  --muted: #eee9dc;
+  --muted-foreground: #52685e;
+  --border: #d9dfd5;
+  --input: #c7d4c9;
+  --ring: #236e58;
 
-  --primary: #0d7a5f;
+  --primary: #236e58;
   --primary-foreground: #ffffff;
-  --primary-soft: #e3f3ed;
-  --accent: #e9a90c;
-  --accent-soft: #fdf3d6;
+  --primary-soft: #e3eee6;
+  --accent: #d9ad61;
+  --accent-soft: #f8edd6;
 
   --success: #11734f;
   --success-soft: #e4f4ec;
@@ -28,10 +28,10 @@
   --info: #1f5fbf;
   --info-soft: #e7effb;
 
-  --sidebar: #0f1d18;
-  --sidebar-foreground: #d7e2dc;
-  --sidebar-muted: #8ea39a;
-  --sidebar-active: #1b2f28;
+  --sidebar: #173d33;
+  --sidebar-foreground: #e9eee6;
+  --sidebar-muted: #b7c9be;
+  --sidebar-active: #2a5345;
 }
 
 @theme inline {
@@ -82,4 +82,88 @@
 .money {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Field Ledger: quiet movement on entry, with a static equivalent for reduced motion. */
+.field-auth-hero {
+  background:
+    radial-gradient(circle at 78% 29%, rgb(217 173 97 / 12%), transparent 28%),
+    linear-gradient(145deg, #173d33 5%, #1b493b 60%, #102e27 100%);
+}
+
+.field-auth-orbit {
+  position: absolute;
+  width: min(38vw, 27rem);
+  aspect-ratio: 1;
+  right: -12%;
+  top: 13%;
+  border: 1px solid rgb(232 217 178 / 18%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.field-auth-orbit::before,
+.field-auth-orbit::after {
+  content: '';
+  position: absolute;
+  border: 1px solid rgb(232 217 178 / 16%);
+  border-radius: 50%;
+  inset: 16%;
+}
+
+.field-auth-orbit::after { inset: 32%; }
+
+.field-auth-orbit-dot {
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e5bd78;
+  box-shadow: 0 0 25px rgb(229 189 120 / 65%);
+}
+
+.field-auth-path {
+  position: absolute;
+  right: -7%;
+  bottom: 18%;
+  width: 53%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(229 189 120 / 60%), transparent);
+  transform: rotate(-22deg);
+  pointer-events: none;
+}
+
+@keyframes field-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes field-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes field-quote {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .field-auth-orbit { animation: field-orbit 32s linear infinite; }
+  .field-auth-enter { animation: field-rise 560ms cubic-bezier(.2,.75,.2,1) both; }
+  .field-auth-quote { animation: field-quote 360ms ease-out both; }
+  .field-auth-action { transition: transform 180ms ease, background-color 180ms ease, box-shadow 180ms ease; }
+  .field-auth-action:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgb(35 110 88 / 18%); }
+  .field-nav-link { transition: transform 160ms ease, background-color 160ms ease, color 160ms ease; }
+  .field-nav-link:hover { transform: translateX(2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field-auth-orbit,
+  .field-auth-enter,
+  .field-auth-quote,
+  .field-auth-action,
+  .field-nav-link,
+  .field-auth-enter .animate-spin { animation: none !important; transition: none !important; }
 }

@@ -16,10 +16,10 @@ import { UserMenu } from './user-menu';
 function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2.5 px-3">
-      <span className="flex size-8 items-center justify-center rounded-lg bg-primary font-heading text-base font-black text-white">
+      <span className="flex size-9 items-center justify-center rounded-xl bg-accent font-heading text-lg font-black text-sidebar">
         S
       </span>
-      <span className="font-heading text-[15px] font-bold text-white">Susu Portal</span>
+      <span className="font-heading text-[15px] leading-[1.05] font-bold text-white">Susu<br />Operations</span>
     </Link>
   );
 }
@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur sm:px-6">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur sm:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
             <Menu className="size-5" />
           </Button>
