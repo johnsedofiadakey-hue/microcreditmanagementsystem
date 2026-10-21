@@ -28,8 +28,14 @@ async function businessDays(q: Queryable, branchId: string, day: string): Promis
   const rows = await q.query<BusinessDayRow>(
     `with day_figures as (
        select b.id as business_id, b.code,
+              -- Net of approved corrections that took money back off the day's collections (a MOVE keeps the total).
               (select coalesce(sum(amount_pesewas), 0)::bigint from collections c
-                where c.branch_id = $1 and c.business_id = b.id and c.cash_day = $2::date) as collected,
+                where c.branch_id = $1 and c.business_id = b.id and c.cash_day = $2::date)
+              - (select coalesce(sum(r.amount_pesewas), 0)::bigint from correction_requests r
+                   join collections c on c.id = r.collection_id
+                   join approvals a on a.subject_kind = 'CORRECTION' and a.subject_id = r.id and a.decision = 'APPROVED'
+                  where c.branch_id = $1 and c.business_id = b.id and c.cash_day = $2::date
+                    and r.kind in ('REVERSE_COLLECTION', 'REDUCE_COLLECTION')) as collected,
               (select count(*)::bigint from collections c
                 where c.branch_id = $1 and c.business_id = b.id and c.cash_day = $2::date) as collection_count,
               (select coalesce(sum(counted_pesewas), 0)::bigint from handovers h
@@ -181,9 +187,9 @@ export async function collectionDay(q: Queryable, commandId: string): Promise<{ 
 /** The branch a cash record belongs to, for refreshing its dashboard after a callable. */
 export async function branchOfRecord(
   q: Queryable,
-  kind: 'withdrawal' | 'declaration' | 'case' | 'deposit',
+  kind: 'withdrawal' | 'declaration' | 'case' | 'deposit' | 'correction',
   id: string,
 ): Promise<string | null> {
-  const table = { withdrawal: 'withdrawal_requests', declaration: 'handover_declarations', case: 'cases', deposit: 'bank_deposits' }[kind];
+  const table = { withdrawal: 'withdrawal_requests', declaration: 'handover_declarations', case: 'cases', deposit: 'bank_deposits', correction: 'correction_requests' }[kind];
   return (await q.query<{ branch_id: string }>(`select branch_id from ${table} where id = $1`, [id])).rows[0]?.branch_id ?? null;
 }

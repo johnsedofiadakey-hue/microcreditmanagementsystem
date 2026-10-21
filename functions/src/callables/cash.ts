@@ -1,5 +1,9 @@
 import {
   closeBranchDayRequestSchema,
+  decideCorrectionRequestSchema,
+  listCorrectionsRequestSchema,
+  rejectCorrectionRequestSchema,
+  requestCollectionCorrectionRequestSchema,
   decideWithdrawalRequestSchema,
   getBranchCashDayRequestSchema,
   getBranchCloseRequestSchema,
@@ -16,6 +20,7 @@ import {
 import { logger } from 'firebase-functions';
 import type { Database } from '../db/types.js';
 import { resolveCase } from '../cash/cases.js';
+import { approveCorrection, listCorrections, rejectCorrection, requestCollectionCorrection } from '../cash/corrections.js';
 import { closeBranchDay, submitBranchCount } from '../cash/close.js';
 import { confirmHandover, listHandoverDeclarations } from '../cash/handovers.js';
 import { publishBranchAndCompanyDay, publishBranchDay, publishHandoverDeclaration } from '../projections/firestore.js';
@@ -85,8 +90,23 @@ export const resolveCaseFn = staffCallable(resolveCaseRequestSchema, async ({ db
   return null;
 });
 
+// ── Corrections: request (maker) → approve or reject (a different person); approval posts ──
+export const requestCollectionCorrectionFn = staffCallable(requestCollectionCorrectionRequestSchema, ({ db, actor, input }) =>
+  db.transaction((tx) => requestCollectionCorrection(tx, actor, input)),
+);
+export const approveCorrectionFn = staffCallable(decideCorrectionRequestSchema, async ({ db, actor, input }) => {
+  const result = await db.transaction((tx) => approveCorrection(tx, actor, input));
+  await refreshBranchDay(db, 'correction', input.correctionId);
+  return result;
+});
+export const rejectCorrectionFn = staffCallable(rejectCorrectionRequestSchema, async ({ db, actor, input }) => {
+  await db.transaction((tx) => rejectCorrection(tx, actor, input));
+  return null;
+});
+export const listCorrectionsFn = staffCallable(listCorrectionsRequestSchema, ({ db, actor, input }) => listCorrections(db, actor, input));
+
 /** Best-effort: today's dashboard for the branch a record belongs to. */
-async function refreshBranchDay(db: Database, kind: 'withdrawal' | 'declaration' | 'case', id: string): Promise<void> {
+async function refreshBranchDay(db: Database, kind: 'withdrawal' | 'declaration' | 'case' | 'correction', id: string): Promise<void> {
   const branchId = await branchOfRecord(db, kind, id).catch(() => null);
   if (branchId) await publishBranchDay(db, branchId);
 }

@@ -79,6 +79,27 @@ Call with `httpsCallable(functions, '<name>')`. App Check is enforced. Paged lis
 | `getAccountStatement` | `getAccountStatementRequestSchema` `{ susuAccountId, from?, to?, cursor?, limit? }` | `{ account: { id, memberId, productName, balancePesewas, status }, lines: [{ postedAt, kind, description, debitPesewas, creditPesewas, balanceAfterPesewas, batchId }], nextCursor }` — newest first; `balanceAfterPesewas` is the member's balance right after that line | any staff except AGENT (scoped) | **built 19 Oct** |
 | `listPendingApprovals` | `listPendingApprovalsRequestSchema` `{ branchId? }` | `{ items: [{ kind: 'MEMBER_REGISTRATION', id, summary, requestedBy, requestedAt, branchId }] }` — oldest first; `requestedBy` is the maker (hide "Review" when it's the signed-in user — the server refuses it anyway) | SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER (scoped) | **built 19 Oct** |
 | `listAuditEvents` | `listAuditEventsRequestSchema` `{ entityKind?, entityId?, branchId?, cursor?, limit? }` | `{ events: [{ at, actorUid, action, entityKind, entityId, channel, branchId, data }], nextCursor }` — newest first. Company-level events (`branchId: null`, e.g. staff creation) are visible to head office only | SUPER_ADMIN, COMPLIANCE, BRANCH_MANAGER (own branches) | **built 19 Oct** |
+### Corrections to collections — **built 21 Oct**
+
+A posted collection is never edited (client guide §10). One person **requests** a correction; a **different** authorised person **approves** or **rejects** it; only an approval posts money, and the database ties that journal batch to the approval record (requester = actor, approver = approved_by). Types in `@susu/shared` (`corrections.ts`).
+
+| Kind | When to offer it | Effect when approved |
+|---|---|---|
+| `REVERSE_COLLECTION` | the member did not pay | the whole collection is reversed: member balance and the pair's custody both go down |
+| `REDUCE_COLLECTION` | more was recorded than paid (`correctPesewas` = what was really paid) | the excess comes off the member and the pair's custody |
+| `MOVE_COLLECTION` | recorded against the wrong member (`toSusuAccountId`, same branch and business) | the amount moves to the right member; cash is untouched |
+
+Offer "Request correction" on statement lines of kind `SUSU_COLLECTION` (their `batchId` is the `collectionBatchId`). Correction batches then show on statements as kind `CORRECTION:MOVE_COLLECTION`, `CORRECTION:REDUCE_COLLECTION` or `REVERSAL:SUSU_COLLECTION`.
+
+| Function | Request schema (`@susu/shared`) | Returns | Who may call | Status |
+|---|---|---|---|---|
+| `requestCollectionCorrection` | `requestCollectionCorrectionRequestSchema` `{ collectionBatchId, kind, correctPesewas? (REDUCE only), toSusuAccountId? (MOVE only), reason (≥ 10 chars) }` | `{ correctionId, needsHeadOffice }`. Refused: not a collection (`NOT_FOUND`); already corrected or a request already open (`CONFLICT`); same account, other branch or business, or a correct amount not below the recorded one (`INVALID_COMMAND`); target inactive (`ACCOUNT_NOT_ACTIVE`) | SUPER_ADMIN, BRANCH_MANAGER, CASHIER, SUPERVISOR (own branch) | **built 21 Oct** |
+| `approveCorrection` | `decideCorrectionRequestSchema` `{ correctionId }` | `{ batchId }`. Refused: the requester (`SELF_APPROVAL_FORBIDDEN`); a branch manager above GH₵ 1,000 (`APPROVAL_LIMIT_EXCEEDED`, `CORRECTION_HEAD_OFFICE_THRESHOLD_PESEWAS`, placeholder until the client's approval matrix); already decided (`CONFLICT`); for REVERSE/REDUCE when the pair has already handed the cash over, or for any kind when the member has since withdrawn it (`INSUFFICIENT_BALANCE`, with a message saying which) — the request then stays PENDING | SUPER_ADMIN, FINANCE, COMPLIANCE (any amount); BRANCH_MANAGER (own branch, up to the threshold) | **built 21 Oct** |
+| `rejectCorrection` | `rejectCorrectionRequestSchema` `{ correctionId, reason }` | `null`. Same people as approve (no threshold); never the requester. A rejected collection can be asked about again | as approve | **built 21 Oct** |
+| `listCorrections` | `listCorrectionsRequestSchema` `{ branchId?, status?: 'PENDING' \| 'APPROVED' \| 'REJECTED', cursor?, limit? }` | `{ corrections: CorrectionSummary[], nextCursor }` — newest first; each with the collection, member, target member, amounts, reason, `needsHeadOffice`, `requestedBy` (hide Approve/Reject for the maker) and `decision` | makers and checkers above (scoped) | **built 21 Oct** |
+
+Not in `listPendingApprovals` (its `kind` union is unchanged): show PENDING corrections from `listCorrections` in the approvals area. No new reject reasons. The day dashboards' `collectedPesewas` is net of approved REVERSE/REDUCE corrections.
+
 ### Bank deposits matched to closes — **built 20 Oct (Step 7)**
 
 Branch close → bank deposit → bank statement match (BUILD_PLAN §7.2). Types in `@susu/shared` (`bank.ts`).

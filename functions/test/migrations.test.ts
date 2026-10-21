@@ -57,7 +57,7 @@ describe('006_businesses over Step 6 data', () => {
     expect((await db.query<{ business_id: string }>('select business_id from ledger_accounts')).rows[0]!.business_id).toBe(GADUFIA);
     expect((await db.query<{ business_id: string }>('select business_id from branch_counts')).rows[0]!.business_id).toBe(GADUFIA);
     // 007 and 008 on top: the pre-006 close still reads, with the newer checklist fields defaulted.
-    expect(await migrate(db)).toEqual(['007_cash_controls', '008_bank']);
+    expect(await migrate(db)).toEqual(['007_cash_controls', '008_bank', '009_corrections']);
     const closed = await branchCloseChecklist(db, branchId, GADUFIA, '2026-10-19');
     expect(closed).toMatchObject({ carriedIn: { count: 0 }, postedAfterClose: { count: 0 }, pendingDeclarations: { count: 0 } });
     expect(closed).toMatchObject({ status: 'CLOSED', businessId: GADUFIA, businessName: 'Gadufia Fiase Susu Services', closedBy: 'manager-1' });
