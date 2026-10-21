@@ -1,6 +1,7 @@
 'use client';
 
-import { Menu, ShieldAlert, X } from 'lucide-react';
+import { Menu, ShieldAlert, ShieldCheck, X } from 'lucide-react';
+import { multiFactor, TotpMultiFactorGenerator } from 'firebase/auth';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -25,13 +26,15 @@ function Brand() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { claims } = useSession();
+  const { user, claims } = useSession();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => setMobileOpen(false), [pathname]);
 
   const allowed = rolesForPath(pathname);
   const permitted = !allowed || allowed.includes(claims.role);
+  const needsAuthenticator = ['SUPER_ADMIN', 'FINANCE', 'BRANCH_MANAGER'].includes(claims.role)
+    && !multiFactor(user).enrolledFactors.some((factor) => factor.factorId === TotpMultiFactorGenerator.FACTOR_ID);
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[248px_1fr]">
@@ -82,6 +85,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+          {needsAuthenticator && pathname !== '/security' && (
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm">
+              <span className="flex items-center gap-2"><ShieldCheck className="size-4 shrink-0" aria-hidden="true" /> Your role requires an authenticator before pilot use.</span>
+              <Link href="/security" className="font-semibold text-primary underline underline-offset-4">Set up now</Link>
+            </div>
+          )}
           {permitted ? (
             children
           ) : (

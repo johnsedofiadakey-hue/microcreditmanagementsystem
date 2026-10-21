@@ -1,6 +1,7 @@
 'use client';
 
-import { LogOut, RefreshCw } from 'lucide-react';
+import { LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -47,6 +48,7 @@ export function UserMenu() {
           <span>{ROLE_LABELS[claims.role]}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild><Link href="/security"><ShieldCheck /> Account security</Link></DropdownMenuItem>
         <DropdownMenuItem
           onSelect={async () => {
             await refreshClaims();

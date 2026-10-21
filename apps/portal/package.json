@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --port 3000",
-    "build": "next build",
+    "dev": "bash scripts/fetch-satoshi.sh && next dev --port 3000",
+    "build": "bash scripts/fetch-satoshi.sh && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },

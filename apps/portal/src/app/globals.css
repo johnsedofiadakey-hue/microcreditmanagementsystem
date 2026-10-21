@@ -62,7 +62,7 @@
   --color-sidebar-active: var(--sidebar-active);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: 'Satoshi', var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-satoshi), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
