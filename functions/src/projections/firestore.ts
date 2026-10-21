@@ -3,7 +3,7 @@ import { logger } from 'firebase-functions';
 import type { Queryable } from '../db/types.js';
 import { routeDayKey } from '@susu/shared';
 import { deviceStatusDocs, pairSyncHealthForDevice } from '../reads/syncHealth.js';
-import { activeBranchIds, computeBranchDay, computeCompanyDay } from '../reads/dashboards.js';
+import { activeBranchIds, computeBranchDay, computeCompanyDay, recentlyCorrectedDays } from '../reads/dashboards.js';
 import { getHandoverDeclaration } from '../cash/handovers.js';
 import { buildPairRoute } from '../routes/routes.js';
 
@@ -156,13 +156,26 @@ export async function publishBranchAndCompanyDay(q: Queryable, branchId: string,
   await publishCompanyDay(q, day);
 }
 
-/** Every active branch and the company, for today and yesterday (late figures settle after midnight). */
-export async function publishAllDayDashboards(q: Queryable, now: Date = new Date()): Promise<{ branches: number }> {
+/** How far back the scheduled repair looks for approved corrections to older days. */
+export const CORRECTION_REPAIR_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * Every active branch and the company, for today and yesterday (late figures settle after midnight),
+ * plus any older day whose collections had a correction approved in the last 48 hours — the safety net
+ * if the publish right after an approval failed.
+ */
+export async function publishAllDayDashboards(q: Queryable, now: Date = new Date()): Promise<{ branches: number; correctedDays: number }> {
   const today = routeDayKey(now);
   const branches = await activeBranchIds(q);
-  for (const day of [previousDayKey(today), today]) {
+  const recentDays = [previousDayKey(today), today];
+  for (const day of recentDays) {
     for (const branchId of branches) await publishBranchDay(q, branchId, day);
     await publishCompanyDay(q, day);
   }
-  return { branches: branches.length };
+  const corrected = (await recentlyCorrectedDays(q, new Date(now.getTime() - CORRECTION_REPAIR_WINDOW_MS))).filter(
+    (d) => !recentDays.includes(d.day),
+  );
+  for (const { branchId, day } of corrected) await publishBranchDay(q, branchId, day);
+  for (const day of new Set(corrected.map((d) => d.day))) await publishCompanyDay(q, day);
+  return { branches: branches.length, correctedDays: corrected.length };
 }

@@ -193,3 +193,39 @@ export async function branchOfRecord(
   const table = { withdrawal: 'withdrawal_requests', declaration: 'handover_declarations', case: 'cases', deposit: 'bank_deposits', correction: 'correction_requests' }[kind];
   return (await q.query<{ branch_id: string }>(`select branch_id from ${table} where id = $1`, [id])).rows[0]?.branch_id ?? null;
 }
+
+/**
+ * The branch days whose dashboards an approved correction changes: the corrected collection's cash day
+ * (its `collected` figure is net of approved corrections) and `today`, when the approval happened. A
+ * correction to an older collection therefore republishes that older day too, not only today.
+ */
+export async function correctionDays(q: Queryable, correctionId: string, today: string): Promise<{ branchId: string; days: string[] } | null> {
+  const row = (
+    await q.query<{ branch_id: string; day: string }>(
+      `select c.branch_id, to_char(c.cash_day, 'YYYY-MM-DD') as day
+         from correction_requests r join collections c on c.id = r.collection_id
+        where r.id = $1`,
+      [correctionId],
+    )
+  ).rows[0];
+  if (!row) return null;
+  return { branchId: row.branch_id, days: [...new Set([row.day, today])].sort() };
+}
+
+/**
+ * Branch days of collections whose correction was approved since `since`, for the scheduled repair:
+ * if the publish right after an approval failed, the next scheduled run still fixes that day, however
+ * old it is.
+ */
+export async function recentlyCorrectedDays(q: Queryable, since: Date): Promise<{ branchId: string; day: string }[]> {
+  const rows = await q.query<{ branch_id: string; day: string }>(
+    `select distinct c.branch_id, to_char(c.cash_day, 'YYYY-MM-DD') as day
+       from approvals a
+       join correction_requests r on a.subject_kind = 'CORRECTION' and r.id = a.subject_id
+       join collections c on c.id = r.collection_id
+      where a.decision = 'APPROVED' and a.decided_at >= $1
+      order by 2, 1`,
+    [since.toISOString()],
+  );
+  return rows.rows.map((r) => ({ branchId: r.branch_id, day: r.day }));
+}

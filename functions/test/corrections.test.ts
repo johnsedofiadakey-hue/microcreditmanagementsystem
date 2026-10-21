@@ -9,7 +9,7 @@ import { findLedgerAccountId, getBalance } from '../src/ledger/accounts.js';
 import { findBalanceMismatches } from '../src/ledger/reconcile.js';
 import { createBranch } from '../src/org/branches.js';
 import { getAccountStatement } from '../src/reads/members.js';
-import { computeBranchDay } from '../src/reads/dashboards.js';
+import { computeBranchDay, correctionDays, recentlyCorrectedDays } from '../src/reads/dashboards.js';
 import { actor, addActiveMember, freshDatabase, seedBranch, signedCollection } from './helpers.js';
 import { handedOver } from './bankHelpers.js';
 
@@ -198,5 +198,36 @@ describe('database guards (even if application code is bypassed)', () => {
         [collectionId, seed.branchId, seed.businessId],
       ),
     ).rejects.toThrow(/does not fit/);
+  });
+});
+
+describe('dashboards after correcting an older day (audit 21 Oct, finding 1)', () => {
+  it('names the corrected collection’s own cash day for republishing, and the scheduled repair finds it', async () => {
+    const batch = await collect(3_000);
+    // Make the collection belong to a day well outside today/yesterday, as an old one would.
+    const oldDay = '2026-10-01';
+    await db.query('alter table collections disable trigger collections_append_only');
+    await db.query(`update collections set cash_day = $1 where batch_id = $2`, [oldDay, batch]);
+    await db.query('alter table collections enable trigger collections_append_only');
+
+    const before = await computeBranchDay(db, seed.branchId, oldDay);
+    expect(before.collectedPesewas).toBe(3_000);
+    const { correctionId } = await request({ collectionBatchId: batch, kind: 'REDUCE_COLLECTION', correctPesewas: 2_000, reason: REASON });
+    await approve(correctionId);
+
+    // The old day's figure changes in the books...
+    expect((await computeBranchDay(db, seed.branchId, oldDay)).collectedPesewas).toBe(2_000);
+    // ...so approval republishes that day as well as today,
+    expect(await correctionDays(db, correctionId, today())).toEqual({ branchId: seed.branchId, days: [oldDay, today()].sort() });
+    // and the scheduled repair picks it up even if that publish failed.
+    expect(await recentlyCorrectedDays(db, new Date(Date.now() - 60_000))).toEqual([{ branchId: seed.branchId, day: oldDay }]);
+    expect(await recentlyCorrectedDays(db, new Date(Date.now() + 60_000))).toEqual([]);
+  });
+
+  it('a rejected correction changes nothing and is not republished', async () => {
+    const batch = await collect(1_000);
+    const { correctionId } = await request({ collectionBatchId: batch, kind: 'REVERSE_COLLECTION', reason: REASON });
+    await reject(correctionId);
+    expect(await recentlyCorrectedDays(db, new Date(Date.now() - 60_000))).toEqual([]);
   });
 });

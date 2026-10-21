@@ -1,5 +1,6 @@
 import {
   closeBranchDayRequestSchema,
+  routeDayKey,
   decideCorrectionRequestSchema,
   listCorrectionsRequestSchema,
   rejectCorrectionRequestSchema,
@@ -24,7 +25,7 @@ import { approveCorrection, listCorrections, rejectCorrection, requestCollection
 import { closeBranchDay, submitBranchCount } from '../cash/close.js';
 import { confirmHandover, listHandoverDeclarations } from '../cash/handovers.js';
 import { publishBranchAndCompanyDay, publishBranchDay, publishHandoverDeclaration } from '../projections/firestore.js';
-import { branchOfRecord } from '../reads/dashboards.js';
+import { branchOfRecord, correctionDays } from '../reads/dashboards.js';
 import { getBranchCashDay, getBranchClose, listCases, listHandovers, listWithdrawals } from '../cash/reads.js';
 import { approveWithdrawal, payWithdrawal, rejectWithdrawal, requestWithdrawal } from '../cash/withdrawals.js';
 import { SMS_API_KEY, getDatabase } from '../runtime.js';
@@ -96,7 +97,9 @@ export const requestCollectionCorrectionFn = staffCallable(requestCollectionCorr
 );
 export const approveCorrectionFn = staffCallable(decideCorrectionRequestSchema, async ({ db, actor, input }) => {
   const result = await db.transaction((tx) => approveCorrection(tx, actor, input));
-  await refreshBranchDay(db, 'correction', input.correctionId);
+  // The corrected collection's own cash day changes, however old it is, and so does the company roll-up.
+  const affected = await correctionDays(db, input.correctionId, routeDayKey()).catch(() => null);
+  for (const day of affected?.days ?? []) await publishBranchAndCompanyDay(db, affected!.branchId, day);
   return result;
 });
 export const rejectCorrectionFn = staffCallable(rejectCorrectionRequestSchema, async ({ db, actor, input }) => {
@@ -106,7 +109,7 @@ export const rejectCorrectionFn = staffCallable(rejectCorrectionRequestSchema, a
 export const listCorrectionsFn = staffCallable(listCorrectionsRequestSchema, ({ db, actor, input }) => listCorrections(db, actor, input));
 
 /** Best-effort: today's dashboard for the branch a record belongs to. */
-async function refreshBranchDay(db: Database, kind: 'withdrawal' | 'declaration' | 'case' | 'correction', id: string): Promise<void> {
+async function refreshBranchDay(db: Database, kind: 'withdrawal' | 'declaration' | 'case', id: string): Promise<void> {
   const branchId = await branchOfRecord(db, kind, id).catch(() => null);
   if (branchId) await publishBranchDay(db, branchId);
 }
