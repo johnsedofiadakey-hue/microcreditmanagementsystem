@@ -39,6 +39,7 @@ corepack pnpm test:rules       # Firestore rules tests in the emulator (needs JD
 corepack pnpm build            # bundle functions into functions/lib
 firebase emulators:start       # local Auth, Firestore, Functions, Storage
 ```
+CI (`.github/workflows/ci.yml`) runs typecheck + unit, `test:pg`, `test:rules` and the functions bundle on every push to `main` and every PR. Keep them green.
 
 ## Design standards (UI)
 Clean, minimalist, lively. Satoshi for headings, Inter for UI text. B2B SaaS quality.
