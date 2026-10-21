@@ -17,6 +17,7 @@ import { useBusinesses } from '@/lib/use-businesses';
 import { useList } from '@/lib/use-list';
 import { cn, formatDateTime, todayKey } from '@/lib/utils';
 import { CasesView } from './cases';
+import { CloseDialog } from './close-dialog';
 import { CountDialog } from './count-dialog';
 import { DepositsView } from './deposits';
 import { HandoversView } from './handovers';
@@ -34,8 +35,10 @@ function Amount({ label, value }: { label: string; value: number }) {
 }
 
 function BusinessChecklist({ item }: { item: BranchCloseChecklist }) {
-  const { claims } = useSession();
+  const { user, claims } = useSession();
   const canCount = (claims.role === 'CASHIER' || claims.role === 'BRANCH_MANAGER') && item.day === todayKey() && item.status !== 'CLOSED';
+  const canClose = (claims.role === 'BRANCH_MANAGER' || claims.role === 'SUPER_ADMIN') && item.day === todayKey() && item.status !== 'CLOSED';
+  const independentCount = item.count && item.count.countedBy !== user.uid;
   return (
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-4">
@@ -48,6 +51,7 @@ function BusinessChecklist({ item }: { item: BranchCloseChecklist }) {
             {item.status === 'CLOSED' ? 'Closed' : item.status === 'COUNTED' ? 'Counted' : 'Open'}
           </StatusChip>
           {canCount && <CountDialog item={item} />}
+          {canClose && independentCount && <CloseDialog item={item} />}
         </div>
       </CardHeader>
       <CardContent className="grid gap-5">
@@ -104,6 +108,13 @@ function BusinessChecklist({ item }: { item: BranchCloseChecklist }) {
           <p>Pending approvals: <strong>{item.pendingApprovals}</strong></p>
           <p>Open difference cases: <strong>{item.openCases}</strong></p>
         </div>
+
+        {canClose && !item.count && (
+          <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">A cashier must record a count before a manager can close this business’s day.</p>
+        )}
+        {canClose && item.count && !independentCount && (
+          <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">You recorded the latest count. A different manager must close this business’s day.</p>
+        )}
 
         {item.pairs.length > 0 && (
           <div className="border-t border-border pt-4">

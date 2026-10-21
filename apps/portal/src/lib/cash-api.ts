@@ -2,7 +2,9 @@
 
 import type {
   BranchCashDay,
+  BranchCloseChecklist,
   CaseSummary,
+  CloseBranchDayRequest,
   ConfirmHandoverRequest,
   DecideWithdrawalRequest,
   HandoverDeclarationSummary,
@@ -60,4 +62,8 @@ export function resolveCase(input: ResolveCaseRequest) {
 
 export function submitBranchCount(input: SubmitBranchCountRequest) {
   return write<SubmitBranchCountRequest, { countId: string; expectedPesewas: number; differencePesewas: number }>('submitBranchCount', input);
+}
+
+export function closeBranchDay(input: CloseBranchDayRequest) {
+  return write<CloseBranchDayRequest, { differencePesewas: number; caseId: string | null; checklist: BranchCloseChecklist }>('closeBranchDay', input);
 }
