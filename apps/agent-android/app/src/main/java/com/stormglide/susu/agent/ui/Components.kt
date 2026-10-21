@@ -38,12 +38,14 @@ fun SyncChip(state: SyncState, modifier: Modifier = Modifier) {
     val (label, fg, bg) = when (state) {
         SyncState.PENDING_SYNC -> Triple("Pending sync", SusuColors.Warning, SusuColors.WarningSoft)
         SyncState.SYNCED -> Triple("Synced ✓", SusuColors.Success, SusuColors.SuccessSoft)
+        SyncState.RECORDED -> Triple("Declared ✓", SusuColors.Success, SusuColors.SuccessSoft)
         SyncState.REJECTED -> Triple("Rejected", SusuColors.Danger, SusuColors.DangerSoft)
         SyncState.FAILED -> Triple("Retrying", SusuColors.Warning, SusuColors.WarningSoft)
     }
     val icon = when (state) {
         SyncState.PENDING_SYNC -> Icons.Outlined.Schedule
         SyncState.SYNCED -> Icons.Outlined.CheckCircle
+        SyncState.RECORDED -> Icons.Outlined.CheckCircle
         else -> Icons.Outlined.ErrorOutline
     }
     Row(

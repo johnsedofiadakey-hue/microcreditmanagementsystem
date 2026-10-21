@@ -72,6 +72,7 @@ class CommandQueue(
             val state = when {
                 pendingWrites || status == null -> SyncState.PENDING_SYNC
                 status == "POSTED" -> SyncState.SYNCED
+                status == "RECORDED" -> SyncState.RECORDED
                 status == "REJECTED" -> SyncState.REJECTED
                 else -> SyncState.FAILED
             }
@@ -82,9 +83,11 @@ class CommandQueue(
                 memberId = payload["memberId"] as? String ?: "",
                 susuAccountId = payload["susuAccountId"] as? String ?: "",
                 amountPesewas = (payload["amountPesewas"] as? Number)?.toLong() ?: 0L,
+                type = doc.getString("type") ?: Commands.COLLECTION,
                 state = state,
                 onPhoneOnly = pendingWrites,
                 receiptRef = doc.getString("postingId")?.take(8)?.uppercase(),
+                recordRef = doc.getString("recordId")?.take(8)?.uppercase(),
                 reason = doc.getString("reason"),
                 message = doc.getString("message"),
             )

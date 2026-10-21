@@ -18,7 +18,25 @@ data class RouteMember(
     val expectedPesewas: Long,
 )
 
-enum class SyncState { PENDING_SYNC, SYNCED, REJECTED, FAILED }
+enum class SyncState { PENDING_SYNC, SYNCED, RECORDED, REJECTED, FAILED }
+
+data class HandoverAmount(val businessId: String, val declaredPesewas: Long)
+
+data class HandoverLine(
+    val businessId: String,
+    val businessName: String,
+    val declaredPesewas: Long,
+    val status: String,
+    val countedPesewas: Long?,
+    val differencePesewas: Long?,
+)
+
+data class HandoverDeclaration(
+    val id: String,
+    val capturedAt: String,
+    val agentUid: String,
+    val lines: List<HandoverLine>,
+)
 
 /** A command document as the agent sees it, including ones still only on this phone. */
 data class QueuedCommand(
@@ -28,10 +46,12 @@ data class QueuedCommand(
     val memberId: String,
     val susuAccountId: String,
     val amountPesewas: Long,
+    val type: String = Commands.COLLECTION,
     val state: SyncState,
     /** True while the write has not reached the server (still in Firestore's offline cache). */
     val onPhoneOnly: Boolean,
     val receiptRef: String? = null,
+    val recordRef: String? = null,
     val reason: String? = null,
     val message: String? = null,
 )

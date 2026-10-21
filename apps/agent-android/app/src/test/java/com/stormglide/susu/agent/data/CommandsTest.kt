@@ -49,6 +49,28 @@ class CommandsTest {
         assertFalse(Commands.isValidCollectionAmount(1_000_001))
     }
 
+    @Test fun handoverDeclarationSignsCanonicalBusinessLinesWithoutMovingMoney() {
+        var signed = ""
+        val id = "0f8fad5b-d9cb-469f-a165-70867728950e"
+        val business = "0b5e55e5-0000-4000-8000-000000000001"
+        val command = Commands.handoverDeclaration(
+            commandId = id,
+            agentUid = "agent-a",
+            deviceId = "device-a",
+            seq = 43,
+            capturedAt = "2026-10-21T12:00:00Z",
+            appVersion = "0.1.0",
+            lines = listOf(HandoverAmount(business, 2_000)),
+            sign = { signed = it; "c2lnbmF0dXJlLWZvci10ZXN0" },
+        )
+        assertEquals(Commands.HANDOVER_DECLARATION, command["type"])
+        assertEquals(setOf("type", "agentUid", "deviceId", "seq", "capturedAt", "appVersion", "payload", "sig"), command.keys)
+        assertEquals(
+            "susu-cmd-v1|$id|HANDOVER_DECLARATION|agent-a|device-a|43|2026-10-21T12:00:00Z|{\"lines\":[{\"businessId\":\"$business\",\"declaredPesewas\":2000}]}",
+            signed,
+        )
+    }
+
     @Test fun deviceProblemsTellTheAgentToStop() {
         assertTrue(RejectionGuidance.isDeviceProblem("DEVICE_REVOKED"))
         assertTrue(RejectionGuidance.isDeviceProblem("DEVICE_NOT_ENROLLED"))

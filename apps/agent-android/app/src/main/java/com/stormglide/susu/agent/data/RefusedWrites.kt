@@ -21,6 +21,7 @@ private val Context.refusedDataStore: DataStore<Preferences> by preferencesDataS
 data class RefusedWrite(
     val agentUid: String,
     val id: String,
+    val type: String = Commands.COLLECTION,
     val seq: Long,
     val capturedAt: String,
     val memberId: String,
@@ -34,6 +35,7 @@ data class RefusedWrite(
         memberId = memberId,
         susuAccountId = susuAccountId,
         amountPesewas = amountPesewas,
+        type = type,
         state = SyncState.REJECTED,
         // It will never reach the server, so it doesn't hold up sign-out; it stays listed as Rejected.
         onPhoneOnly = false,
@@ -50,6 +52,7 @@ data class RefusedWrite(
             return RefusedWrite(
                 agentUid = command["agentUid"] as? String ?: return null,
                 id = commandId,
+                type = command["type"] as? String ?: Commands.COLLECTION,
                 seq = (command["seq"] as? Number)?.toLong() ?: return null,
                 capturedAt = command["capturedAt"] as? String ?: "",
                 memberId = payload["memberId"] as? String ?: "",
@@ -69,6 +72,7 @@ object RefusedWritesJson {
                 JSONObject()
                     .put("agentUid", w.agentUid)
                     .put("id", w.id)
+                    .put("type", w.type)
                     .put("seq", w.seq)
                     .put("capturedAt", w.capturedAt)
                     .put("memberId", w.memberId)
@@ -88,6 +92,7 @@ object RefusedWritesJson {
                 RefusedWrite(
                     agentUid = o.getString("agentUid"),
                     id = o.getString("id"),
+                    type = o.optString("type", Commands.COLLECTION),
                     seq = o.getLong("seq"),
                     capturedAt = o.optString("capturedAt", ""),
                     memberId = o.optString("memberId", ""),

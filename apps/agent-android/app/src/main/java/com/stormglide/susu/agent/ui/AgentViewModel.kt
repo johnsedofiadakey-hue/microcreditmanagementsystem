@@ -10,6 +10,8 @@ import com.stormglide.susu.agent.SusuAgentApp
 import com.stormglide.susu.agent.data.AuthState
 import com.stormglide.susu.agent.data.Commands
 import com.stormglide.susu.agent.data.EnrollmentState
+import com.stormglide.susu.agent.data.HandoverDeclaration
+import com.stormglide.susu.agent.data.HandoverAmount
 import com.stormglide.susu.agent.data.QueuedCommand
 import com.stormglide.susu.agent.data.RouteMember
 import com.stormglide.susu.agent.data.SyncState
@@ -57,6 +59,10 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
         if (state is AuthState.Ready) app.routes.today(state.session.agentPairId) else emptyFlow()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val handovers: StateFlow<List<HandoverDeclaration>> = auth.flatMapLatest { state ->
+        if (state is AuthState.Ready) app.handovers.observe(state.session.agentPairId) else emptyFlow()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     fun refreshRoute() { routeRefresh.value += 1 }
 
     /** Records that have not reached the server. Sign-out is blocked while this is above zero. */
@@ -85,6 +91,9 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _draft = MutableStateFlow<CollectionDraft?>(null)
     val draft: StateFlow<CollectionDraft?> = _draft.asStateFlow()
+
+    private val _handoverSaving = MutableStateFlow(false)
+    val handoverSaving: StateFlow<Boolean> = _handoverSaving.asStateFlow()
 
     /** True from an allowed sign-out until the process restarts with a wiped cache. */
     private val _signingOut = MutableStateFlow(false)
@@ -201,6 +210,38 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
             app.commands.enqueue(draft.commandId, command)
             _draft.value = null
             onSaved(draft.commandId)
+        }
+    }
+
+    /** A declaration moves no money. The branch cashier confirms it independently later. */
+    fun saveHandover(lines: List<HandoverAmount>, onSaved: (String) -> Unit) {
+        val session = (auth.value as? AuthState.Ready)?.session ?: return
+        if (_handoverSaving.value || lines.isEmpty()) return
+        _handoverSaving.value = true
+        val commandId = Commands.newCommandId()
+        viewModelScope.launch {
+            try {
+                val command = withContext(Dispatchers.IO) {
+                    val identity = app.identity.ready()
+                    val seq = app.device.nextSeq()
+                    Commands.handoverDeclaration(
+                        commandId = commandId,
+                        agentUid = session.uid,
+                        deviceId = identity.deviceId,
+                        seq = seq,
+                        capturedAt = Commands.capturedAt(Instant.now()),
+                        appVersion = BuildConfig.VERSION_NAME,
+                        lines = lines,
+                        sign = app.identity::sign,
+                    )
+                }
+                app.commands.enqueue(commandId, command)
+                onSaved(commandId)
+            } catch (e: Exception) {
+                _notice.value = "Could not sign the handover on this phone. Try again, or contact your supervisor."
+            } finally {
+                _handoverSaving.value = false
+            }
         }
     }
 

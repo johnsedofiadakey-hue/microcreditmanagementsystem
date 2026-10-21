@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Handshake
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material3.Badge
@@ -32,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stormglide.susu.agent.data.AuthState
 import com.stormglide.susu.agent.ui.screens.CollectScreen
+import com.stormglide.susu.agent.ui.screens.HandoverScreen
 import com.stormglide.susu.agent.ui.screens.LockScreen
 import com.stormglide.susu.agent.ui.screens.LockUi
 import com.stormglide.susu.agent.ui.screens.SigningOutScreen
@@ -42,7 +44,7 @@ import com.stormglide.susu.agent.ui.screens.RouteScreen
 import com.stormglide.susu.agent.ui.screens.SignInScreen
 import com.stormglide.susu.agent.ui.theme.SusuColors
 
-private enum class Tab(val label: String) { ROUTE("Route"), RECORDS("Records"), PHONE("Phone") }
+private enum class Tab(val label: String) { ROUTE("Route"), HANDOVER("Handover"), RECORDS("Records"), PHONE("Phone") }
 
 /**
  * @param locked true until the agent passes the biometric / screen-lock prompt (cold start, or 5+ minutes away).
@@ -84,6 +86,8 @@ fun AgentApp(
 private fun SignedIn(vm: AgentViewModel, state: AuthState.Ready) {
     val route by vm.route.collectAsStateWithLifecycle()
     val queue by vm.queue.collectAsStateWithLifecycle()
+    val handovers by vm.handovers.collectAsStateWithLifecycle()
+    val handoverSaving by vm.handoverSaving.collectAsStateWithLifecycle()
     val unsynced by vm.unsyncedCount.collectAsStateWithLifecycle()
     val pending by vm.pendingCount.collectAsStateWithLifecycle()
     val rejected by vm.rejectedCount.collectAsStateWithLifecycle()
@@ -122,6 +126,7 @@ private fun SignedIn(vm: AgentViewModel, state: AuthState.Ready) {
                             icon = {
                                 val icon = when (t) {
                                     Tab.ROUTE -> Icons.Outlined.Groups
+                                    Tab.HANDOVER -> Icons.Outlined.Handshake
                                     Tab.RECORDS -> Icons.AutoMirrored.Outlined.ReceiptLong
                                     Tab.PHONE -> Icons.Outlined.PhoneAndroid
                                 }
@@ -153,6 +158,7 @@ private fun SignedIn(vm: AgentViewModel, state: AuthState.Ready) {
             } else {
                 when (tab) {
                     Tab.ROUTE -> RouteScreen(route, queue, onCollect = vm::startCollection)
+                    Tab.HANDOVER -> HandoverScreen(handovers, handoverSaving) { lines -> vm.saveHandover(lines) { tab = Tab.RECORDS } }
                     Tab.RECORDS -> QueueScreen(queue, vm::memberName)
                     Tab.PHONE -> PhoneScreen(state.session, deviceId, fingerprint, enrollment, unsynced, onSignOut = { vm.signOut() })
                 }

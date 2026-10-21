@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.stormglide.susu.agent.data.Cedis
+import com.stormglide.susu.agent.data.Commands
 import com.stormglide.susu.agent.data.QueuedCommand
 import com.stormglide.susu.agent.data.RejectionGuidance
 import com.stormglide.susu.agent.data.SyncState
@@ -59,14 +60,14 @@ fun QueueScreen(queue: List<QueuedCommand>, memberName: (String) -> String) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(memberName(item.memberId), style = MaterialTheme.typography.titleMedium)
+                            Text(if (item.type == Commands.HANDOVER_DECLARATION) "Cash handover declaration" else memberName(item.memberId), style = MaterialTheme.typography.titleMedium)
                             Text(
                                 "${item.capturedAt.replace('T', ' ').removeSuffix("Z")} · #${item.seq}",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = SusuColors.Muted,
                             )
                         }
-                        Text(Cedis.format(item.amountPesewas), style = MaterialTheme.typography.titleMedium)
+                        if (item.type == Commands.COLLECTION) Text(Cedis.format(item.amountPesewas), style = MaterialTheme.typography.titleMedium)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SyncChip(item.state)
@@ -75,6 +76,11 @@ fun QueueScreen(queue: List<QueuedCommand>, memberName: (String) -> String) {
                                 "Receipt ${item.receiptRef}",
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.labelMedium,
+                            )
+                            item.state == SyncState.RECORDED -> Text(
+                                "Declared — waiting for the cashier${item.recordRef?.let { " · $it" } ?: ""}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = SusuColors.Muted,
                             )
                             item.state == SyncState.PENDING_SYNC && item.onPhoneOnly -> Text(
                                 "Saved on this phone",

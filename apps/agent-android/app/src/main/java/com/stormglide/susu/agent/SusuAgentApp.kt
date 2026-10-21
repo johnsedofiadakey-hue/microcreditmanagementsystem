@@ -16,6 +16,7 @@ import com.stormglide.susu.agent.data.CommandQueue
 import com.stormglide.susu.agent.data.DataStoreRefusedWriteStore
 import com.stormglide.susu.agent.data.DeviceStore
 import com.stormglide.susu.agent.data.EnrollmentRepository
+import com.stormglide.susu.agent.data.HandoverRepository
 import com.stormglide.susu.agent.data.RouteRepository
 import com.stormglide.susu.agent.security.AppLock
 import com.stormglide.susu.agent.security.DeviceIdentity
@@ -34,6 +35,8 @@ class SusuAgentApp : Application() {
     lateinit var commands: CommandQueue
         private set
     lateinit var routes: RouteRepository
+        private set
+    lateinit var handovers: HandoverRepository
         private set
     lateinit var device: DeviceStore
         private set
@@ -84,6 +87,7 @@ class SusuAgentApp : Application() {
         auth = AuthRepository(firebaseAuth)
         commands = CommandQueue(firestore, DataStoreRefusedWriteStore(this), appScope)
         routes = RouteRepository(firestore)
+        handovers = HandoverRepository(firestore)
         device = DeviceStore(this)
         identity = DeviceIdentity(device, KeystoreDeviceKey())
         enrollment = EnrollmentRepository(firestore, device, identity)

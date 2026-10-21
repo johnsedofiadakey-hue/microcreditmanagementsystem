@@ -12,6 +12,7 @@ import java.util.UUID
  */
 object Commands {
     const val COLLECTION = "COLLECTION"
+    const val HANDOVER_DECLARATION = "HANDOVER_DECLARATION"
 
     /** packages/shared COMMAND_SIGNATURE_VERSION. */
     const val SIGNATURE_VERSION = "susu-cmd-v1"
@@ -74,6 +75,35 @@ object Commands {
         val sig = sign(signingString(commandId, COLLECTION, agentUid, deviceId, seq, capturedAt, payload))
         return mapOf(
             "type" to COLLECTION,
+            "agentUid" to agentUid,
+            "deviceId" to deviceId,
+            "seq" to seq,
+            "capturedAt" to capturedAt,
+            "appVersion" to appVersion,
+            "payload" to payload,
+            "sig" to sig,
+        )
+    }
+
+    /** Evidence-only declaration: cashier confirmation is the separate money-moving step. */
+    fun handoverDeclaration(
+        commandId: String,
+        agentUid: String,
+        deviceId: String,
+        seq: Long,
+        capturedAt: String,
+        appVersion: String,
+        lines: List<HandoverAmount>,
+        sign: (String) -> String,
+    ): Map<String, Any> {
+        require(isUuidV4(commandId)) { "command IDs are UUID v4" }
+        require(seq >= 1) { "seq starts at 1" }
+        require(lines.size in 1..10 && lines.map { it.businessId }.distinct().size == lines.size) { "use 1–10 distinct businesses" }
+        require(lines.any { it.declaredPesewas > 0 } && lines.all { it.declaredPesewas in 0..100_000_000L }) { "declaration amount out of range" }
+        val payload = mapOf("lines" to lines.map { mapOf("businessId" to it.businessId, "declaredPesewas" to it.declaredPesewas) })
+        val sig = sign(signingString(commandId, HANDOVER_DECLARATION, agentUid, deviceId, seq, capturedAt, payload))
+        return mapOf(
+            "type" to HANDOVER_DECLARATION,
             "agentUid" to agentUid,
             "deviceId" to deviceId,
             "seq" to seq,
