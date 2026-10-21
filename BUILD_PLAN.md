@@ -21,11 +21,17 @@ Ownership rules are in `CLAUDE.md`. Cross-owner requests go in `docs/handoff/REQ
 
 | Step | Backend | Notes |
 |---|---|---|
-| 1 — Foundation | **Done** (local) | Monorepo, Firebase config, Auth claims, org model, audit log, emulator rules tests. Firebase projects and CI not created yet. |
-| 2 — Ledger core | **Done** | Double-entry posting, idempotency, reversals, append-only + balanced-batch enforced in the database. |
-| 3 — Members & Susu accounts | **Partly done** | Register, approve (maker-checker), products, open account. Read/list endpoints next. |
-| 4 — Offline collections | **Backend done** | Firestore command queue → trigger → ledger, with SMS receipt queued in the outbox. Agent app is UI-owned. |
-| 5–9 | Not started | |
+| 1 — Foundation | **Done** | Monorepo, Firebase config, Auth claims, org model, audit log, emulator rules tests, GitHub CI (21 Oct). Only a trial Firebase project exists (`docs/ops/TRIAL_DEPLOYMENT.md`); dev / UAT / production projects not created. |
+| 2 — Ledger core | **Done** | Double-entry posting, idempotency, reversals, append-only + balanced-batch enforced in the database. Three businesses with separate ledgers (ADR-001). |
+| 3 — Members & Susu accounts | **Done** | Register, approve (maker-checker), products, accounts, routes, reads. Business modules gate later stages. |
+| 4 — Offline collections | **Done** | Signed command queue → trigger → ledger, route check at posting, clock-free recovery of lost triggers (ADR-002). |
+| 5 — SMS receipts | **Done, provider not chosen** | Outbox dispatcher with retries; receipts are logged until an SMS provider is contracted. |
+| 6 — Handover, close, withdrawals | **Done (backend)** | Two-party handover, three-person withdrawals, count + close, cases, corrections with maker-checker (ADR-002). UI screens in progress. |
+| 7 — Bank match, dashboards | **Done (backend)** | Deposits matched to closes, live day dashboards. |
+| 8 — Ghana Card verification | **Blocked** | Waiting on the NIA / IVSP provider. |
+| 9 — Migration, UAT, pilot | **Not started** | No migration tooling, UAT environment or pilot yet. |
+
+Live, detailed status: `docs/PROJECT_PLAN.md`. Comparison with the September blueprint: `docs/architecture/BLUEPRINT_GAP_ANALYSIS.md`.
 
 ---
 
